@@ -23,10 +23,13 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy Google SDK "tools" package is no longer available.
+          packages: 'platform-tools'
 
       - name: Install Android SDK packages
         run: |
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager --install "platform-tools" "platforms;android-36-ext1" "build-tools;36.0.0"
 
       - name: Install Gradle 9.3.1
         run: |
@@ -37,9 +40,6 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
 
-      - name: Run unit tests
-        run: gradle --no-daemon :app:testDebugUnitTest
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -47,3 +47,6 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Run unit tests
+        run: gradle --no-daemon :app:testDebugUnitTest
