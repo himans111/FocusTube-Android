@@ -1,0 +1,6 @@
+{
+  "name": "FocusTube",
+  "description": "Distraction-free classic YouTube client for Android with email login, subscribed channel feed, and Picture-in-Picture playback.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Classic Red Tube Container -->
+    <path
+        android:fillColor="#FF0000"
+        android:pathData="M74,38 C74,38 72.8,33.5 70.8,31.5 C68.3,28.8 65.5,28.8 64.2,28.6 C55.2,28 54,28 54,28 C54,28 52.8,28 43.8,28.6 C42.5,28.8 39.7,28.8 37.2,31.5 C35.2,33.5 34,38 34,38 C34,38 33,44.5 33,51 L33,57 C33,63.5 34,70 34,70 C34,70 35.2,74.5 37.2,76.5 C39.7,79.2 43,79.1 44.5,79.4 C51,80 54,80 54,80 C54,80 55.2,80 64.2,79.4 C65.5,79.2 68.3,79.2 70.8,76.5 C72.8,74.5 74,70 74,70 C74,70 75,63.5 75,57 L75,51 C75,44.5 74,38 74,38 Z" />
+    
+    <!-- White Play Triangle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M49,44 L63,54 L49,64 Z" />
+
+    <!-- Focus Target Accent Indicators -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M24,34 L24,24 L34,24 M84,34 L84,24 L74,24 M24,74 L24,84 L34,84 M84,74 L84,84 L74,84" />
+</vector>
