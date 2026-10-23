@@ -1,0 +1,27 @@
+name: One-time APK artifact cleanup
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/cleanup-apk-artifact-once.yml
+permissions:
+  actions: write
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the existing APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/12440666188"
+      - name: Remove this temporary workflow
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          file=".github/workflows/cleanup-apk-artifact-once.yml"
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${file}?ref=main" --jq .sha)"
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/contents/${file}" -f message="chore: remove one-time artifact cleanup workflow" -f sha="$sha" -f branch=main
