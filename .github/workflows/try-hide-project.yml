@@ -1,0 +1,41 @@
+name: One-time repository removal attempt
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/try-hide-project.yml
+permissions:
+  actions: write
+  contents: write
+  pages: write
+jobs:
+  remove_or_hide:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Try deleting the repository
+        id: delete
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api --method DELETE "repos/${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "repo_deleted=true" >> "$GITHUB_OUTPUT"
+            echo "Repository deletion API accepted the request."
+          else
+            echo "Repository deletion was denied by the token."
+          fi
+      - name: Try to make repository private
+        if: steps.delete.outputs.repo_deleted != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh repo edit "$GITHUB_REPOSITORY" --visibility private --accept-visibility-change-consequences; then
+            echo "Repository visibility changed to private."
+          else
+            echo "Repository visibility change was denied by the token."
+            if gh api --method DELETE "repos/${GITHUB_REPOSITORY}/pages" >/dev/null 2>&1; then
+              echo "GitHub Pages site was deleted."
+            else
+              echo "No accessible GitHub Pages site could be deleted."
+            fi
+          fi
