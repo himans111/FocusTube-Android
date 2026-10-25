@@ -6,9 +6,9 @@ A static, single-page player for Telegram Mini Apps. It accepts common YouTube v
 
 Use this verified static page URL as the Mini App's Web App URL:
 
-`https://cdn.jsdelivr.net/gh/himans111/FocusTube-Android@978bca258586667c479fcf88c80676554ba50ee1/telegram-mini-app/index.html`
+`https://cdn.jsdelivr.net/gh/himans111/FocusTube-Android/telegram-mini-app/index.html`
 
-This page is served from the public GitHub repository through jsDelivr's HTTPS CDN. The source file is `telegram-mini-app/index.html`. This avoids needing to enable GitHub Pages in repository settings.
+This page is served from the public GitHub repository through jsDelivr's HTTPS CDN. Use the default-branch URL without an `@version` segment; this avoids a jsDelivr URL parsing error. The source file is `telegram-mini-app/index.html`.
 
 ## Connect to Telegram
 
