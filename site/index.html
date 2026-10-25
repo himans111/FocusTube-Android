@@ -24,7 +24,6 @@
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     allowfullscreen
     referrerpolicy="strict-origin-when-cross-origin"></iframe>
-  <div id="notice"><span id="noticeText">वीडियो लिंक में ID नहीं मिली।</span><a id="ytLink" href="https://www.youtube.com/" target="_blank" rel="noopener">YouTube पर खोलें ↗</a></div>
 </div>
 <script>
 (() => {
@@ -33,9 +32,6 @@
 
   const qs = new URLSearchParams(location.search);
   const hs = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
-  const notice = document.getElementById("notice");
-  const noticeText = document.getElementById("noticeText");
-  const ytLink = document.getElementById("ytLink");
   const player = document.getElementById("player");
 
   function decode(value) {
@@ -100,15 +96,13 @@
 
   const item = parseVideo(getPayload());
   if (!item) {
+    // Keep a blank 16:9 box if there is no usable video payload; never show the full form or extra text.
     player.style.display = "none";
-    notice.style.display = "flex";
     return;
   }
   if (item.type === "playlist") {
-    ytLink.href = "https://www.youtube.com/playlist?list=" + encodeURIComponent(item.id);
     player.src = "https://www.youtube-nocookie.com/embed/videoseries?list=" + encodeURIComponent(item.id) + "&autoplay=1&mute=1&playsinline=1&rel=0";
   } else {
-    ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(item.id);
     player.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(item.id) + "?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1";
   }
 })();
