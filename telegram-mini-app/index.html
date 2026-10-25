@@ -190,9 +190,20 @@
       }
 
       function getStartPayload() {
+        const query = new URLSearchParams(location.search);
+        const hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
         let start = "";
         try { start = tg?.initDataUnsafe?.start_param || ""; } catch (_) {}
-        if (!start) start = new URLSearchParams(location.search).get("tgWebAppStartParam") || "";
+        // Telegram clients may expose the start payload in initData, the query string, or launch hash.
+        start = start ||
+          query.get("tgWebAppStartParam") ||
+          query.get("startapp") ||
+          hash.get("tgWebAppStartParam") ||
+          hash.get("startapp") ||
+          "";
+
+        // Link format: https://t.me/Karanany_bot/click?startapp=YOUTUBE_VIDEO_ID
+        // Playlist format: https://t.me/Karanany_bot/click?startapp=pl_YOUTUBE_PLAYLIST_ID
         if (start.startsWith("pl_")) {
           const listId = start.slice(3);
           if (/^[A-Za-z0-9_-]{10,200}$/.test(listId)) {
@@ -203,11 +214,12 @@
           const parsed = parseYouTube(start);
           if (parsed) return parsed;
         }
-        const q = new URLSearchParams(location.search);
-        const query = q.get("url") || q.get("v") || "";
-        if (query) return parseYouTube(query);
-        // First launch: load a public sample video so the player is not empty.
-        return parseYouTube("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+
+        const incoming = query.get("url") || query.get("v") || hash.get("url") || hash.get("v") || "";
+        if (incoming) return parseYouTube(incoming);
+
+        // First open without a payload: use the video ID from the user's example link as a demo.
+        return parseYouTube("v2k16ANGHMQ");
       }
 
       $("playBtn").addEventListener("click", playFromInput);
