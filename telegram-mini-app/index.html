@@ -140,19 +140,43 @@
       let currentSource = "";
 
       function parseYouTube(value) {
-        const raw = String(value || "").trim();
+        let raw = String(value || "").trim();
         if (!raw) return null;
+
+        // Handle percent-encoded links that get passed through another Telegram link.
+        for (let i = 0; i < 2; i++) {
+          try {
+            const decoded = decodeURIComponent(raw);
+            if (decoded === raw) break;
+            raw = decoded.trim();
+          } catch (_) { break; }
+        }
+
+        if (raw.startsWith("pl_") && /^[A-Za-z0-9_-]{10,200}$/.test(raw.slice(3))) {
+          const id = raw.slice(3);
+          return { type: "playlist", id, source: "https://www.youtube.com/playlist?list=" + encodeURIComponent(id) };
+        }
         if (/^[A-Za-z0-9_-]{11}$/.test(raw)) {
           return { type: "video", id: raw, source: "https://www.youtube.com/watch?v=" + raw };
         }
+
         let u;
         try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : "https://" + raw); }
         catch (_) { return null; }
 
+        if (u.protocol !== "https:" && u.protocol !== "http:") return null;
         const host = u.hostname.toLowerCase().replace(/^(www|m|music)\./, "");
+
+        // If a Telegram deep link was accidentally passed as the payload, unwrap its startapp value.
+        if (host === "t.me" || host === "telegram.me" || host === "www.t.me") {
+          const nested = u.searchParams.get("startapp") || u.searchParams.get("tgWebAppStartParam") || "";
+          if (nested && nested !== raw) return parseYouTube(nested);
+          return null;
+        }
+
         const isYt = host === "youtube.com" || host === "youtu.be" ||
                      host === "youtube-nocookie.com";
-        if (!isYt || (u.protocol !== "https:" && u.protocol !== "http:")) return null;
+        if (!isYt) return null;
 
         let id = "";
         if (host === "youtu.be") {
