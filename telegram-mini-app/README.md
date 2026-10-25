@@ -4,11 +4,16 @@ A static, single-page player for Telegram Mini Apps. It accepts common YouTube v
 
 ## Published HTTPS URL
 
-Use this verified static page URL as the Mini App's Web App URL:
+Use this short link as the Mini App's **Web App URL** in BotFather:
 
-`https://cdn.jsdelivr.net/gh/himans111/FocusTube-Android@f1be35b5ecdb7d099ae889d59e67188a6d567c50/telegram-mini-app/index.html`
+`https://4lin.uk/P1hiB2`
 
-This exact, commit-pinned page URL was verified to serve the current HTML over HTTPS from the public GitHub repository through jsDelivr's CDN. Pinning the commit avoids serving a stale cached copy of the default branch. GitHub Pages is not enabled for this repository yet, so the `github.io` URL is not currently a working deployment. The source file is `telegram-mini-app/index.html`.
+The short link redirects to a commit-pinned jsDelivr page containing the current version of `telegram-mini-app/index.html`. On launch with a `startapp` video payload, the page hides the full TubeBridge form and shows only a compact 16:9 video player.
+
+Source page:
+`https://cdn.jsdelivr.net/gh/himans111/FocusTube-Android@1c42513010e34cdee1aee7f1ddbca8122541246d/telegram-mini-app/index.html`
+
+GitHub Pages is not enabled for this repository, so do not use its `github.io` URL unless a Pages deployment has been configured separately.
 
 ## Connect to Telegram
 
