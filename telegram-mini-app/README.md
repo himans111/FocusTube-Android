@@ -14,25 +14,24 @@ The page is only a black 16:9 player box. It reads Telegram's Mini App `startapp
 
 ## Connect to Telegram
 
-1. Open [@BotFather](https://t.me/BotFather).
-2. Use `/myapps` and select your existing Mini App, or create one with `/newapp` after selecting your bot.
-3. Set the Mini App's Web App URL to the published HTTPS URL above.
-4. Open the Mini App and paste a YouTube link to test it.
-5. Enter the exact Telegram bot username and Mini App short name shown by BotFather. Select **वीडियो चलाएँ**, then **Mini App लिंक बनाएँ**. The resulting link opens the selected video in this player.
+1. Open the repository's [GitHub Pages settings](https://github.com/himans111/FocusTube-Android/settings/pages).
+2. Under **Build and deployment**, select **Deploy from a branch**.
+3. Select branch `main` and folder `/site`, then press **Save**.
+4. After GitHub Pages is published, set the `click` Mini App's Web App URL in [@BotFather](https://t.me/BotFather) to:
 
-A generated video link has this form:
+   `https://himans111.github.io/FocusTube-Android/`
 
-`https://t.me/<bot_username>/<app_short_name>?startapp=<video_id>`
+5. Open a test deep link such as `https://t.me/Karanany_bot/click?startapp=v2k16ANGHMQ`.
 
-The existing Mini App short name provided for this setup is `click`, so the page defaults to bot username `Karanany_bot` and app short name `click`. These must match BotFather exactly. This repository does not change BotFather settings automatically.
+The player reads the payload from Telegram's Mini App data. For a video, `startapp` should be the 11-character YouTube ID. For a playlist, use `pl_` plus the playlist ID. The player tries muted autoplay; mobile/Telegram settings or YouTube embed restrictions can still require a tap.
 
 ## Make channel posts open in the Mini App
 
-A normal YouTube URL posted to a Telegram channel will not automatically redirect into a Mini App. Your posting code (for example Google Apps Script) must include the generated Telegram deep link in the message. For each video, extract the 11-character video ID and use:
+A plain YouTube URL does not automatically launch a Telegram Mini App. The message must contain a Telegram Mini App deep link. For example, a YouTube video ID `v2k16ANGHMQ` becomes:
 
-`https://t.me/<bot_username>/<app_short_name>?startapp=<video_id>`
+`https://t.me/Karanany_bot/click?startapp=v2k16ANGHMQ`
 
-You can include both the original YouTube link and the Mini App link in the post. For playlists, this page uses `pl_` plus the playlist ID as the start parameter.
+A posting bot/script can extract IDs from YouTube watch, youtu.be, Shorts, Live, or embed links and add the corresponding Telegram deep link to each post. The player can also parse a full YouTube URL or a nested Telegram link if that value is actually supplied as the Mini App's `startapp` payload.
 
 ## Limitations
 
