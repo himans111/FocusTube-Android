@@ -38,10 +38,46 @@
     .foot { font-size:12px; text-align:center; color:#9297a3; padding:5px 12px 0; }
     .smallbtn { min-height:39px; padding:9px 12px; font-size:13px; }
     [hidden] { display:none !important; }
+
+    /* When launched from a Telegram deep link, show only the video box. */
+    body.minimal-mode {
+      margin:0 !important;
+      min-height:0 !important;
+      padding:0 !important;
+      background:#000 !important;
+      overflow-x:hidden;
+    }
+    body.minimal-mode > main { display:none !important; }
+    body.minimal-mode > #miniPlayerView {
+      display:block !important;
+      width:100%;
+      margin:0;
+      padding:0;
+      background:#000;
+    }
+    #miniPlayerBox {
+      width:100%;
+      max-width:760px;
+      aspect-ratio:16/9;
+      margin:0 auto;
+      background:#000;
+      overflow:hidden;
+    }
+    #miniPlayerBox iframe {
+      display:block;
+      width:100%;
+      height:100%;
+      border:0;
+      background:#000;
+    }
+
     @media(min-width:560px) { body { padding-top:28px; } .card { padding:21px; } h1 { font-size:25px; } }
   </style>
 </head>
 <body>
+  <div id="miniPlayerView" hidden aria-label="YouTube video player">
+    <div id="miniPlayerBox"></div>
+  </div>
   <main class="wrap">
     <header>
       <div class="logo" aria-hidden="true">▶</div>
@@ -281,8 +317,32 @@
         }
       });
 
+      function renderMinimalPlayer(item) {
+        const box = $("miniPlayerBox");
+        const frame = document.createElement("iframe");
+        frame.title = "YouTube video player";
+        frame.setAttribute("allow", "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share");
+        frame.setAttribute("allowfullscreen", "");
+        frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+
+        if (item.type === "playlist") {
+          frame.src = "https://www.youtube-nocookie.com/embed/videoseries?list=" +
+            encodeURIComponent(item.id) + "&autoplay=1&playsinline=1&rel=0";
+        } else {
+          let src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(item.id) +
+            "?autoplay=1&playsinline=1&rel=0&modestbranding=1";
+          if (item.playlist) src += "&list=" + encodeURIComponent(item.playlist);
+          frame.src = src;
+        }
+
+        box.replaceChildren(frame);
+        $("miniPlayerView").hidden = false;
+        document.body.classList.add("minimal-mode");
+        try { if (tg) { tg.ready(); tg.expand(); } } catch (_) {}
+      }
+
       const initial = getStartPayload();
-      if (initial) renderPlayer(initial, initial.source);
+      if (initial) renderMinimalPlayer(initial);
     })();
   </script>
 </body>
