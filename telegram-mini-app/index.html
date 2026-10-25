@@ -351,10 +351,10 @@
 
         if (item.type === "playlist") {
           frame.src = "https://www.youtube-nocookie.com/embed/videoseries?list=" +
-            encodeURIComponent(item.id) + "&autoplay=1&playsinline=1&rel=0";
+            encodeURIComponent(item.id) + "&autoplay=1&mute=1&playsinline=1&rel=0";
         } else {
           let src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(item.id) +
-            "?autoplay=1&playsinline=1&rel=0&modestbranding=1";
+            "?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1";
           if (item.playlist) src += "&list=" + encodeURIComponent(item.playlist);
           frame.src = src;
         }
