@@ -2,13 +2,17 @@
 
 A static, single-page player for Telegram Mini Apps. It accepts common YouTube **video** links (watch, youtu.be, Shorts, Live, embed) and playlist links. It reads a Mini App `startapp` value to load a video automatically, and can build a Telegram deep link for a selected video or playlist.
 
-## Hosting
+## First-time publishing setup (required)
 
-The repository contains a GitHub Actions workflow at `.github/workflows/deploy-telegram-mini-app.yml`. After that workflow succeeds, the expected GitHub Pages base URL is:
+This repository did not have GitHub Pages enabled. GitHub blocks the workflow from creating the Pages site automatically with its default workflow token, so enable it once:
 
-`https://himans111.github.io/FocusTube-Android/`
+1. Open [FocusTube-Android → Settings → Pages](https://github.com/himans111/FocusTube-Android/settings/pages).
+2. In **Build and deployment → Source**, select **GitHub Actions**.
+3. Open [Actions → Deploy Telegram YouTube Mini App](https://github.com/himans111/FocusTube-Android/actions/workflows/deploy-telegram-mini-app.yml) and run **Run workflow** on `main` (or rerun the latest run after Pages is enabled).
+4. Wait for the run to show **Success**. Then open the published site:
+   `https://himans111.github.io/FocusTube-Android/`
 
-Check the workflow run and open the Pages URL to confirm it is live before adding it to Telegram.
+Do not paste the Pages URL into Telegram until the workflow is successful and that URL opens the TubeBridge page.
 
 ## Connect to Telegram
 
