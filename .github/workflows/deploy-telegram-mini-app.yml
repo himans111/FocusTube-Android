@@ -1,0 +1,40 @@
+name: Deploy Telegram YouTube Mini App
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "telegram-mini-app/**"
+      - ".github/workflows/deploy-telegram-mini-app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Mini App website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./telegram-mini-app
+
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@v4
