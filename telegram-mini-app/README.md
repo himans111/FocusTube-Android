@@ -22,7 +22,7 @@ A generated video link has this form:
 
 `https://t.me/<bot_username>/<app_short_name>?startapp=<video_id>`
 
-The bot username and Mini App short name must match BotFather exactly. This repository does not change BotFather settings automatically.
+The existing Mini App short name provided for this setup is `click`, so the page defaults to bot username `Karanany_bot` and app short name `click`. These must match BotFather exactly. This repository does not change BotFather settings automatically.
 
 ## Make channel posts open in the Mini App
 
