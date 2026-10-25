@@ -206,7 +206,8 @@
         const q = new URLSearchParams(location.search);
         const query = q.get("url") || q.get("v") || "";
         if (query) return parseYouTube(query);
-        return null;
+        // First launch: load a public sample video so the player is not empty.
+        return parseYouTube("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
       }
 
       $("playBtn").addEventListener("click", playFromInput);
