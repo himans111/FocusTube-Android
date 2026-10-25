@@ -50,7 +50,7 @@
     const raw = decode(value);
     if (!raw) return null;
 
-    // Payload supports a video ID, a playlist ID prefixed with pl_, or a full YouTube URL.
+    // Payload can be an ID, playlist, YouTube URL, or another Telegram Mini App link.
     if (raw.startsWith("pl_") && /^[A-Za-z0-9_-]{10,200}$/.test(raw.slice(3))) return { type: "playlist", id: raw.slice(3) };
     if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return { type: "video", id: raw };
     if (raw.startsWith("yt_") && /^[A-Za-z0-9_-]{11}$/.test(raw.slice(3))) return { type: "video", id: raw.slice(3) };
@@ -59,7 +59,13 @@
     let u;
     try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : "https://" + raw); }
     catch (_) { return null; }
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
     const host = u.hostname.toLowerCase().replace(/^(www|m|music)\./, "");
+
+    if (host === "t.me" || host === "telegram.me") {
+      const nested = u.searchParams.get("startapp") || u.searchParams.get("tgWebAppStartParam") || "";
+      return nested && nested !== raw ? parseVideo(nested) : null;
+    }
     if (host === "youtu.be") {
       const id = u.pathname.split("/").filter(Boolean)[0];
       return /^[A-Za-z0-9_-]{11}$/.test(id || "") ? { type: "video", id } : null;
@@ -100,10 +106,10 @@
   }
   if (item.type === "playlist") {
     ytLink.href = "https://www.youtube.com/playlist?list=" + encodeURIComponent(item.id);
-    player.src = "https://www.youtube-nocookie.com/embed/videoseries?list=" + encodeURIComponent(item.id) + "&autoplay=1&playsinline=1&rel=0";
+    player.src = "https://www.youtube-nocookie.com/embed/videoseries?list=" + encodeURIComponent(item.id) + "&autoplay=1&mute=1&playsinline=1&rel=0";
   } else {
     ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(item.id);
-    player.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(item.id) + "?autoplay=1&playsinline=1&rel=0&modestbranding=1";
+    player.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(item.id) + "?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1";
   }
 })();
 </script>
