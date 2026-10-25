@@ -50,7 +50,8 @@
     const raw = decode(value);
     if (!raw) return null;
 
-    // Telegram payload may be a plain YouTube ID or a full YouTube URL.
+    // Payload supports a video ID, a playlist ID prefixed with pl_, or a full YouTube URL.
+    if (raw.startsWith("pl_") && /^[A-Za-z0-9_-]{10,200}$/.test(raw.slice(3))) return { type: "playlist", id: raw.slice(3) };
     if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return { type: "video", id: raw };
     if (raw.startsWith("yt_") && /^[A-Za-z0-9_-]{11}$/.test(raw.slice(3))) return { type: "video", id: raw.slice(3) };
     if (raw.startsWith("video_") && /^[A-Za-z0-9_-]{11}$/.test(raw.slice(6))) return { type: "video", id: raw.slice(6) };
@@ -65,8 +66,11 @@
     }
     if (host === "youtube.com" || host === "youtube-nocookie.com") {
       const path = u.pathname.split("/").filter(Boolean);
+      const playlist = u.searchParams.get("list") || "";
+      if (path[0] === "playlist" && /^[A-Za-z0-9_-]{10,200}$/.test(playlist)) return { type: "playlist", id: playlist };
       const id = u.searchParams.get("v") || (["shorts", "live", "embed", "v"].includes(path[0]) ? path[1] : "");
-      return /^[A-Za-z0-9_-]{11}$/.test(id || "") ? { type: "video", id } : null;
+      if (/^[A-Za-z0-9_-]{11}$/.test(id || "")) return { type: "video", id };
+      if (/^[A-Za-z0-9_-]{10,200}$/.test(playlist)) return { type: "playlist", id: playlist };
     }
     return null;
   }
@@ -94,8 +98,13 @@
     notice.style.display = "flex";
     return;
   }
-  ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(item.id);
-  player.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(item.id) + "?autoplay=1&playsinline=1&rel=0&modestbranding=1";
+  if (item.type === "playlist") {
+    ytLink.href = "https://www.youtube.com/playlist?list=" + encodeURIComponent(item.id);
+    player.src = "https://www.youtube-nocookie.com/embed/videoseries?list=" + encodeURIComponent(item.id) + "&autoplay=1&playsinline=1&rel=0";
+  } else {
+    ytLink.href = "https://www.youtube.com/watch?v=" + encodeURIComponent(item.id);
+    player.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(item.id) + "?autoplay=1&playsinline=1&rel=0&modestbranding=1";
+  }
 })();
 </script>
 </body>
