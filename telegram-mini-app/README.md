@@ -8,7 +8,7 @@ A static, single-page player for Telegram Mini Apps. It accepts common YouTube v
 
 `https://himans111.github.io/FocusTube-Android/`
 
-This URL becomes live after enabling GitHub Pages once in the repository settings. The minimal single-player page is already stored at `site/index.html`; set the Pages source to **Deploy from a branch**, branch **main**, folder **/site**, then Save. This uses GitHub Pages' real HTML hosting rather than a URL shortener that may show HTML source in an in-app browser.
+This URL becomes live after enabling GitHub Pages once in the repository settings. The minimal single-player page is stored at the repository root as `index.html`; set the Pages source to **Deploy from a branch**, branch **main**, folder **/(root)**, then Save. This uses GitHub Pages' real HTML hosting rather than a URL shortener that may show HTML source in an in-app browser.
 
 The page is only a black 16:9 player box. It reads Telegram's Mini App `startapp` payload, recognizes video IDs, common YouTube URLs, playlists, and nested Telegram links where a `startapp` payload is included, and tries muted inline autoplay.
 
@@ -16,7 +16,7 @@ The page is only a black 16:9 player box. It reads Telegram's Mini App `startapp
 
 1. Open the repository's [GitHub Pages settings](https://github.com/himans111/FocusTube-Android/settings/pages).
 2. Under **Build and deployment**, select **Deploy from a branch**.
-3. Select branch `main` and folder `/site`, then press **Save**.
+3. Select branch `main` and folder `/(root)`, then press **Save**.
 4. After GitHub Pages is published, set the `click` Mini App's Web App URL in [@BotFather](https://t.me/BotFather) to:
 
    `https://himans111.github.io/FocusTube-Android/`
