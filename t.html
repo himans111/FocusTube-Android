@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101114">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>TubeBridge — Telegram YouTube Player</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { color-scheme: dark; --bg:#101114; --panel:#191b20; --panel2:#20232a; --text:#f4f5f7; --muted:#a9adb8; --line:#323640; --accent:#53a7ff; --good:#65d6a3; --danger:#ff8d8d; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); background:radial-gradient(ellipse at top, #202a3b 0, var(--bg) 54%); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    .wrap { width:100%; max-width:720px; margin:0 auto; }
+    header { display:flex; gap:12px; align-items:center; margin:5px 0 20px; }
+    .logo { width:46px; height:46px; flex:0 0 46px; border-radius:15px; display:grid; place-items:center; background:#263d58; color:#8dc7ff; font-size:22px; font-weight:800; }
+    h1 { margin:0; font-size:22px; line-height:1.2; letter-spacing:-.3px; }
+    .sub { margin:4px 0 0; color:var(--muted); font-size:13px; }
+    .card { background:rgba(25,27,32,.96); border:1px solid var(--line); border-radius:20px; padding:17px; margin:14px 0; box-shadow:0 8px 28px rgba(0,0,0,.12); }
+    h2 { margin:0 0 11px; font-size:17px; }
+    .hint { color:var(--muted); font-size:13px; margin:5px 0 12px; }
+    label { display:block; color:#dfe3eb; font-size:13px; font-weight:650; margin:12px 0 6px; }
+    input { width:100%; min-width:0; padding:12px 13px; color:var(--text); background:#111318; border:1px solid #3b404b; border-radius:12px; font:inherit; outline:none; }
+    input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(83,167,255,.15); }
+    button { cursor:pointer; border:0; border-radius:12px; padding:12px 14px; min-height:45px; font:inherit; font-weight:700; }
+    button:focus-visible,a:focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+    .primary { background:var(--accent); color:#071321; width:100%; margin-top:11px; }
+    .secondary { color:var(--text); background:var(--panel2); border:1px solid var(--line); }
+    .row { display:flex; gap:9px; flex-wrap:wrap; }
+    .row > * { flex:1 1 130px; }
+    .status { font-size:13px; color:var(--muted); margin-top:10px; overflow-wrap:anywhere; }
+    .status.good { color:var(--good); } .status.bad { color:var(--danger); }
+    .player-shell { aspect-ratio:16/9; width:100%; border-radius:14px; overflow:hidden; background:#050608; border:1px solid var(--line); display:grid; place-items:center; }
+    .player-shell iframe { display:block; width:100%; height:100%; border:0; }
+    .empty { padding:25px 14px; color:#9499a5; text-align:center; }
+    .tag { display:inline-block; border:1px solid #3b414e; border-radius:99px; color:#c7d2e2; padding:3px 9px; font-size:11px; margin-bottom:10px; }
+    a { color:#93caff; overflow-wrap:anywhere; }
+    .foot { font-size:12px; text-align:center; color:#9297a3; padding:5px 12px 0; }
+    .smallbtn { min-height:39px; padding:9px 12px; font-size:13px; }
+    [hidden] { display:none !important; }
+    @media(min-width:560px) { body { padding-top:28px; } .card { padding:21px; } h1 { font-size:25px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div class="logo" aria-hidden="true">▶</div>
+      <div>
+        <h1>TubeBridge</h1>
+        <p class="sub">YouTube links · Telegram Mini App Player</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <span class="tag">वीडियो प्लेयर</span>
+      <h2>YouTube लिंक खोलें</h2>
+      <p class="hint">वीडियो का लिंक पेस्ट करें। Watch, Shorts, Live, youtu.be और YouTube playlist लिंक समर्थित हैं।</p>
+      <label for="youtubeUrl">YouTube वीडियो या प्लेलिस्ट लिंक</label>
+      <input id="youtubeUrl" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="url" inputmode="url">
+      <div class="row">
+        <button id="playBtn" class="primary" type="button">▶ वीडियो चलाएँ</button>
+        <button id="clearBtn" class="secondary" type="button">साफ़ करें</button>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite">Telegram पोस्ट से Mini App लिंक खोलने पर वीडियो यहाँ अपने आप लोड होगा।</p>
+    </section>
+
+    <section id="playerCard" class="card" hidden>
+      <h2 id="playerTitle">अब चल रहा है</h2>
+      <div id="player" class="player-shell"><div class="empty">वीडियो यहाँ दिखाई देगा</div></div>
+      <div class="row" style="margin-top:12px">
+        <a id="youtubeFallback" class="secondary" style="display:grid;place-items:center;text-align:center;padding:10px 12px;border-radius:12px;text-decoration:none;font-weight:700" target="_blank" rel="noopener noreferrer">YouTube पर खोलें ↗</a>
+        <button id="copyVideoLink" class="secondary smallbtn" type="button">वीडियो लिंक कॉपी करें</button>
+      </div>
+      <p id="embedNote" class="hint">कुछ वीडियो के मालिक embedding बंद रखते हैं। ऐसी स्थिति में “YouTube पर खोलें” चुनें।</p>
+    </section>
+
+    <section class="card">
+      <h2>Telegram Mini App लिंक बनाएँ</h2>
+      <p class="hint">वीडियो चुनने के बाद यह उस वीडियो के लिए Telegram खोलने वाला लिंक बनाएगा। Bot username और Mini App का short name BotFather में मौजूद नाम से बिल्कुल मेल खाना चाहिए।</p>
+      <label for="botName">Telegram bot username (@ के बिना)</label>
+      <input id="botName" value="Karanany_bot" autocapitalize="none" spellcheck="false">
+      <label for="appName">Mini App short name</label>
+      <input id="appName" value="click" autocapitalize="none" spellcheck="false">
+      <button id="makeLinkBtn" class="primary" type="button">Mini App लिंक बनाएँ</button>
+      <label for="miniAppUrl">तैयार लिंक</label>
+      <input id="miniAppUrl" readonly placeholder="पहले कोई YouTube वीडियो या प्लेलिस्ट खोलें">
+      <div class="row">
+        <button id="copyMiniLink" class="secondary" type="button" disabled>लिंक कॉपी करें</button>
+        <button id="openMiniLink" class="secondary" type="button" disabled>Telegram में खोलें ↗</button>
+      </div>
+      <p class="hint">चैनल में Mini App के अंदर वीडियो खोलने के लिए पोस्ट में सामान्य YouTube लिंक के साथ या उसकी जगह यह तैयार Mini App लिंक भी भेजना होगा। केवल साधारण YouTube URL अपने आप इस ऐप में नहीं बदलता।</p>
+    </section>
+
+    <p class="foot">TubeBridge · YouTube का आधिकारिक एम्बेड प्लेयर इस्तेमाल करता है। कुछ वीडियो, उम्र/क्षेत्र प्रतिबंध या embedding settings के कारण यहाँ उपलब्ध नहीं हो सकते।</p>
+  </main>
+
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) { try { tg.ready(); tg.expand(); } catch (_) {} }
+
+      let current = null;
+      let currentSource = "";
+
+      function parseYouTube(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return null;
+        if (/^[A-Za-z0-9_-]{11}$/.test(raw)) {
+          return { type: "video", id: raw, source: "https://www.youtube.com/watch?v=" + raw };
+        }
+        let u;
+        try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : "https://" + raw); }
+        catch (_) { return null; }
+
+        const host = u.hostname.toLowerCase().replace(/^(www|m|music)\./, "");
+        const isYt = host === "youtube.com" || host === "youtu.be" ||
+                     host === "youtube-nocookie.com";
+        if (!isYt || (u.protocol !== "https:" && u.protocol !== "http:")) return null;
+
+        let id = "";
+        if (host === "youtu.be") {
+          id = u.pathname.split("/").filter(Boolean)[0] || "";
+        } else if (u.pathname === "/watch") {
+          id = u.searchParams.get("v") || "";
+        } else {
+          const m = u.pathname.match(/^\/(?:shorts|live|embed|v)\/([A-Za-z0-9_-]{11})(?:\/|$)/);
+          if (m) id = m[1];
+        }
+        const playlist = u.searchParams.get("list") || "";
+        if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) {
+          return {
+            type: "video",
+            id,
+            playlist: /^[A-Za-z0-9_-]{10,200}$/.test(playlist) ? playlist : "",
+            source: "https://www.youtube.com/watch?v=" + id
+          };
+        }
+        if (!id && /^[A-Za-z0-9_-]{10,200}$/.test(playlist)) {
+          return {
+            type: "playlist",
+            id: playlist,
+            source: "https://www.youtube.com/playlist?list=" + encodeURIComponent(playlist)
+          };
+        }
+        return null;
+      }
+
+      function setStatus(message, type) {
+        $("status").textContent = message;
+        $("status").className = "status" + (type ? " " + type : "");
+      }
+
+      function renderPlayer(item, source) {
+        current = item;
+        currentSource = source || item.source;
+        $("playerCard").hidden = false;
+        $("playerTitle").textContent = item.type === "playlist" ? "YouTube प्लेलिस्ट" : "YouTube वीडियो";
+        const box = $("player");
+        box.replaceChildren();
+        const iframe = document.createElement("iframe");
+        iframe.title = item.type === "playlist" ? "YouTube playlist player" : "YouTube video player";
+        iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+        iframe.allowFullscreen = true;
+        iframe.referrerPolicy = "strict-origin-when-cross-origin";
+        if (item.type === "playlist") {
+          iframe.src = "https://www.youtube-nocookie.com/embed/videoseries?list=" + encodeURIComponent(item.id) + "&playsinline=1";
+        } else {
+          iframe.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(item.id) +
+            "?playsinline=1&rel=0" + (item.playlist ? "&list=" + encodeURIComponent(item.playlist) : "");
+        }
+        box.appendChild(iframe);
+        $("youtubeFallback").href = currentSource;
+        $("youtubeFallback").textContent = "YouTube पर खोलें ↗";
+        $("youtubeUrl").value = source || item.source;
+        $("miniAppUrl").value = "";
+        $("copyMiniLink").disabled = true;
+        $("openMiniLink").disabled = true;
+        setStatus("लिंक पहचान लिया गया। यदि वीडियो embed की अनुमति देता है तो वह नीचे चलेगा।", "good");
+      }
+
+      function playFromInput() {
+        const raw = $("youtubeUrl").value.trim();
+        const item = parseYouTube(raw);
+        if (!item) {
+          setStatus("यह समर्थित YouTube वीडियो या playlist लिंक नहीं लग रहा। सही लिंक पेस्ट करें।", "bad");
+          return;
+        }
+        renderPlayer(item, raw);
+      }
+
+      function getStartPayload() {
+        const query = new URLSearchParams(location.search);
+        const hash = new URLSearchParams(String(location.hash || "").replace(/^#/, ""));
+        let start = "";
+        try { start = tg?.initDataUnsafe?.start_param || ""; } catch (_) {}
+        // Telegram clients may expose the start payload in initData, the query string, or launch hash.
+        start = start ||
+          query.get("tgWebAppStartParam") ||
+          query.get("startapp") ||
+          hash.get("tgWebAppStartParam") ||
+          hash.get("startapp") ||
+          "";
+
+        // Link format: https://t.me/Karanany_bot/click?startapp=YOUTUBE_VIDEO_ID
+        // Playlist format: https://t.me/Karanany_bot/click?startapp=pl_YOUTUBE_PLAYLIST_ID
+        if (start.startsWith("pl_")) {
+          const listId = start.slice(3);
+          if (/^[A-Za-z0-9_-]{10,200}$/.test(listId)) {
+            return { type: "playlist", id: listId, source: "https://www.youtube.com/playlist?list=" + encodeURIComponent(listId) };
+          }
+        }
+        if (start) {
+          const parsed = parseYouTube(start);
+          if (parsed) return parsed;
+        }
+
+        const incoming = query.get("url") || query.get("v") || hash.get("url") || hash.get("v") || "";
+        if (incoming) return parseYouTube(incoming);
+
+        // First open without a payload: use the video ID from the user's example link as a demo.
+        return parseYouTube("v2k16ANGHMQ");
+      }
+
+      $("playBtn").addEventListener("click", playFromInput);
+      $("youtubeUrl").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") playFromInput();
+      });
+      $("clearBtn").addEventListener("click", () => {
+        $("youtubeUrl").value = "";
+        $("playerCard").hidden = true;
+        $("player").replaceChildren();
+        $("miniAppUrl").value = "";
+        $("copyMiniLink").disabled = true;
+        $("openMiniLink").disabled = true;
+        current = null;
+        currentSource = "";
+        setStatus("लिंक पेस्ट करें और “वीडियो चलाएँ” दबाएँ।");
+      });
+      $("makeLinkBtn").addEventListener("click", () => {
+        if (!current) {
+          setStatus("पहले सही YouTube वीडियो या playlist लिंक खोलें।", "bad");
+          return;
+        }
+        const bot = $("botName").value.trim().replace(/^@/, "");
+        const app = $("appName").value.trim();
+        if (!/^[A-Za-z0-9_]{5,32}$/.test(bot) || !/^[A-Za-z0-9_]{1,64}$/.test(app)) {
+          setStatus("Bot username या Mini App short name सही भरें।", "bad");
+          return;
+        }
+        const startParam = current.type === "playlist" ? "pl_" + current.id : current.id;
+        const link = "https://t.me/" + bot + "/" + app + "?startapp=" + encodeURIComponent(startParam);
+        $("miniAppUrl").value = link;
+        $("copyMiniLink").disabled = false;
+        $("openMiniLink").disabled = false;
+        setStatus("लिंक तैयार है। इसे पोस्ट करने से पहले short name को BotFather में जाँच लें।", "good");
+      });
+      $("copyMiniLink").addEventListener("click", async () => {
+        const value = $("miniAppUrl").value;
+        if (!value) return;
+        try {
+          await navigator.clipboard.writeText(value);
+          setStatus("Mini App लिंक कॉपी हो गया।", "good");
+        } catch (_) {
+          $("miniAppUrl").select();
+          setStatus("लिंक चुन लिया गया है। कॉपी करने के लिए Copy दबाएँ।");
+        }
+      });
+      $("openMiniLink").addEventListener("click", () => {
+        const url = $("miniAppUrl").value;
+        if (url) location.href = url;
+      });
+      $("copyVideoLink").addEventListener("click", async () => {
+        if (!currentSource) return;
+        try {
+          await navigator.clipboard.writeText(currentSource);
+          setStatus("YouTube लिंक कॉपी हो गया।", "good");
+        } catch (_) {
+          setStatus("YouTube लिंक ऊपर वाले बॉक्स में उपलब्ध है।", "good");
+          $("youtubeUrl").focus();
+        }
+      });
+
+      const initial = getStartPayload();
+      if (initial) renderPlayer(initial, initial.source);
+    })();
+  </script>
+</body>
+</html>
