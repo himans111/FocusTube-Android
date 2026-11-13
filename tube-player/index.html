@@ -56,19 +56,17 @@
       overflow: hidden;
       background: #000;
     }
-    #player {
+    /* YT.Player replaces #player with a direct iframe child. Style both
+       the initial mount node and the iframe that the API inserts. */
+    #player,
+    #video-frame > iframe {
       position: absolute;
       inset: 0;
-      width: 100%;
-      height: 100%;
-      border: 0;
-      background: #000;
-    }
-    #player iframe {
       display: block;
       width: 100%;
       height: 100%;
       border: 0;
+      background: #000;
     }
     /* Telegram fullscreen fills the Mini App viewport. Keep the actual
        YouTube surface 16:9 and center it instead of stretching it to portrait. */
@@ -548,9 +546,10 @@
           playerVars.list = payload.list;
         }
 
+        const initialFrame = videoFrame.getBoundingClientRect();
         const config = {
-          width: "100%",
-          height: "100%",
+          width: Math.round(initialFrame.width),
+          height: Math.round(initialFrame.height),
           playerVars,
           events: {
             onReady(event) {
