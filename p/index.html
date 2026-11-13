@@ -589,6 +589,19 @@
         }
       });
 
+      // Media-first Mini App: request Telegram fullscreen as soon as the
+      // WebApp bridge is ready. Direct links may also use &mode=fullscreen.
+      if (telegram && !telegram.isFullscreen && typeof telegram.requestFullscreen === "function") {
+        window.setTimeout(() => {
+          if (telegram.isFullscreen) return;
+          try {
+            if (!telegram.isVersionAtLeast || telegram.isVersionAtLeast("8.0")) {
+              telegram.requestFullscreen();
+            }
+          } catch (_) {}
+        }, 250);
+      }
+
       startPlayer();
     })();
   </script>
