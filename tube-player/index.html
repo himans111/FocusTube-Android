@@ -233,6 +233,7 @@
           if (request && typeof request.then === "function") {
             request.then(() => {
               landscapeLockState = "locked";
+              if (fullscreen) setStatus("");
             }).catch(() => {
               landscapeLockState = "rejected";
               if (fullscreen) {
@@ -383,9 +384,18 @@
             telegram.requestFullscreen();
             requestLandscapeOrientationFromTap();
             window.setTimeout(() => {
-              if (!fullscreen && !(telegram && telegram.isFullscreen)) {
+              if (telegram && telegram.isFullscreen) {
+                setFullscreenUi(true);
+                if (landscapeLockState !== "locked" &&
+                    window.screen && window.screen.orientation &&
+                    window.screen.orientation.type.startsWith("portrait")) {
+                  setStatus("Fullscreen खुला है। Auto-rotate चालू करें या फोन landscape में घुमाएँ।");
+                }
+              } else if (!fullscreen) {
+                const version = telegram.version || "unknown";
+                const platform = telegram.platform || "unknown";
                 setStatus(
-                  "Telegram ने fullscreen की पुष्टि नहीं की। इस Android client में यह सुविधा उपलब्ध न हो सकती है।",
+                  "Telegram fullscreen की पुष्टि नहीं हुई (v" + version + ", " + platform + ").",
                   true
                 );
               }
