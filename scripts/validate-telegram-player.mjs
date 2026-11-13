@@ -6,12 +6,17 @@ import { spawnSync } from "node:child_process";
 const root = process.cwd();
 const htmlPath = path.join(root, "tube-player/index.html");
 const shortPath = path.join(root, "p/index.html");
+const cacheBustPath = path.join(root, "p2/index.html");
 if (!fs.existsSync(htmlPath)) throw new Error("Missing " + htmlPath);
 if (!fs.existsSync(shortPath)) throw new Error("Missing " + shortPath);
+if (!fs.existsSync(cacheBustPath)) throw new Error("Missing " + cacheBustPath);
 
 const html = fs.readFileSync(htmlPath, "utf8");
 const shortHtml = fs.readFileSync(shortPath, "utf8");
-if (html !== shortHtml) throw new Error("p/index.html and tube-player/index.html must be identical");
+const cacheBustHtml = fs.readFileSync(cacheBustPath, "utf8");
+if (html !== shortHtml || html !== cacheBustHtml) {
+  throw new Error("p/index.html, p2/index.html and tube-player/index.html must be identical");
+}
 
 const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
   .filter((m) => !/\bsrc\s*=/.test(m[1]))
