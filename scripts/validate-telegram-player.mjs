@@ -21,6 +21,9 @@ if (!scripts.length) throw new Error("No inline JavaScript found");
 
 const required = [
   "#video-frame",
+  "#video-frame > iframe",
+  "player.setSize(Math.round(rect.width), Math.round(rect.height))",
+  "width: Math.round(initialFrame.width)",
   "#player-stage.fullscreen",
   "aspect-ratio: 16 / 9",
   "display: grid",
