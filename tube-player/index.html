@@ -336,7 +336,7 @@
               if (telegram.isFullscreen) {
                 setFullscreenUi(true);
                 void lockLandscapeOrientation().then(landscapeLocked => {
-                  if (!landscapeLocked && screen.orientation && screen.orientation.type.startsWith("portrait")) {
+                  if (!landscapeLocked && (!screen.orientation || screen.orientation.type.startsWith("portrait"))) {
                     status.textContent = "Fullscreen is active. Turn on Auto-rotate if the screen stays upright.";
                   }
                 });
@@ -399,7 +399,7 @@
               // Telegram's Mini App is fullscreen now; retry orientation lock
               // only after the host has confirmed its fullscreen state.
               void lockLandscapeOrientation().then(landscapeLocked => {
-                if (!landscapeLocked && screen.orientation && screen.orientation.type.startsWith("portrait")) {
+                if (!landscapeLocked && (!screen.orientation || screen.orientation.type.startsWith("portrait"))) {
                   status.textContent = "Fullscreen is active. Turn on Auto-rotate if the screen stays upright.";
                 }
               });
