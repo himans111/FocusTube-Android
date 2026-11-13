@@ -130,9 +130,9 @@
       bottom: max(10px, env(safe-area-inset-bottom));
       top: auto;
       transform: none;
-      width: 42px;
-      height: 42px;
-      padding: 9px;
+      width: 48px;
+      height: 48px;
+      padding: 11px;
       border: 0;
       border-radius: 50%;
       color: #fff;
@@ -169,7 +169,7 @@
       text-align: center;
       color: rgba(255,255,255,.55);
       font-size: 11px;
-      pointer-events: none;
+      pointer-events: auto;
     }
     #status:empty { display: none; }
     @media (prefers-reduced-motion: no-preference) {
@@ -349,8 +349,10 @@
       }
 
       function setStatus(message, showExternalVideo = false) {
-        status.replaceChildren(document.createTextNode(message || ""));
-        if (!message || !showExternalVideo || !payload) return;
+        status.replaceChildren();
+        if (!message) return;
+        status.appendChild(document.createTextNode(message));
+        if (!showExternalVideo || !payload) return;
         const link = document.createElement("a");
         link.target = "_blank";
         link.rel = "noopener noreferrer";
