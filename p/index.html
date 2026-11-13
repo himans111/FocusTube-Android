@@ -99,8 +99,9 @@
       position: absolute;
       z-index: 5;
       right: 10px;
-      top: 50%;
-      transform: translateY(-50%);
+      bottom: max(10px, env(safe-area-inset-bottom));
+      top: auto;
+      transform: none;
       width: 42px;
       height: 42px;
       padding: 9px;
@@ -188,6 +189,39 @@
       let dragState = null;
       let playerLeft = 0;
       let playerTop = 0;
+      let browserOrientationLocked = false;
+      let telegramOrientationLocked = false;
+
+      async function lockLandscapeOrientation() {
+        // Android WebViews may allow this only after fullscreen has been granted.
+        try {
+          if (screen.orientation && typeof screen.orientation.lock === "function") {
+            await screen.orientation.lock("landscape");
+            browserOrientationLocked = true;
+            return true;
+          }
+        } catch (_) {}
+        return false;
+      }
+
+      function unlockPlayerOrientation() {
+        if (browserOrientationLocked) {
+          try {
+            if (screen.orientation && typeof screen.orientation.unlock === "function") {
+              screen.orientation.unlock();
+            }
+          } catch (_) {}
+          browserOrientationLocked = false;
+        }
+        if (telegramOrientationLocked) {
+          try {
+            if (telegram && typeof telegram.unlockOrientation === "function") {
+              telegram.unlockOrientation();
+            }
+          } catch (_) {}
+          telegramOrientationLocked = false;
+        }
+      }
 
       function decode(value) {
         let result = String(value || "").trim();
@@ -280,37 +314,52 @@
         stage.style.top = "0px";
       }
 
+      async function enterBrowserFullscreen() {
+        if (!stage.requestFullscreen) {
+          setFullscreenUi(false);
+          status.textContent = "Fullscreen is not supported on this device.";
+          return;
+        }
+        try {
+          await stage.requestFullscreen({ navigationUI: "hide" });
+          setFullscreenUi(true);
+          void lockLandscapeOrientation();
+        } catch (_) {
+          setFullscreenUi(false);
+          status.textContent = "Fullscreen is not available in this browser.";
+        }
+      }
+
       async function enterFullscreen() {
         if (fullscreen) return;
+        status.textContent = "";
         setFullscreenUi(true);
-        if (telegram && typeof telegram.requestFullscreen === "function") {
+
+        // Telegram's native Mini App fullscreen expands beyond the WebView.
+        // The browser orientation lock is a best-effort landscape request.
+        if (
+          telegram &&
+          typeof telegram.requestFullscreen === "function" &&
+          (!telegram.isVersionAtLeast || telegram.isVersionAtLeast("8.0"))
+        ) {
           try {
             telegram.requestFullscreen();
-          } catch (_) {
-            setFullscreenUi(false);
-            status.textContent = "Fullscreen is not supported in this Telegram version.";
-          }
-          return;
+            void lockLandscapeOrientation();
+            return;
+          } catch (_) {}
         }
-        if (stage.requestFullscreen) {
-          try {
-            await stage.requestFullscreen();
-          } catch (_) {
-            setFullscreenUi(false);
-            status.textContent = "Fullscreen is not available in this browser.";
-          }
-          return;
-        }
-        status.textContent = "Fullscreen is not supported on this device.";
+
+        await enterBrowserFullscreen();
       }
 
       function exitFullscreen() {
         if (!fullscreen) return;
-        if (telegram && typeof telegram.exitFullscreen === "function") {
+        if (telegram && typeof telegram.exitFullscreen === "function" && telegram.isFullscreen) {
           try { telegram.exitFullscreen(); } catch (_) {}
         } else if (document.fullscreenElement && document.exitFullscreen) {
           document.exitFullscreen().catch(() => {});
         }
+        unlockPlayerOrientation();
         setFullscreenUi(false);
       }
 
@@ -329,17 +378,33 @@
 
         if (typeof telegram.onEvent === "function") {
           telegram.onEvent("fullscreenChanged", () => {
-            setFullscreenUi(Boolean(telegram.isFullscreen));
+            const active = Boolean(telegram.isFullscreen);
+            setFullscreenUi(active);
+            if (active) {
+              // Retry after Telegram confirms fullscreen; Android often requires this timing.
+              void lockLandscapeOrientation();
+            } else {
+              unlockPlayerOrientation();
+            }
           });
-          telegram.onEvent("fullscreenFailed", () => {
+          telegram.onEvent("fullscreenFailed", event => {
             setFullscreenUi(false);
-            status.textContent = "Telegram could not open fullscreen on this device.";
+            unlockPlayerOrientation();
+            const reason = event && event.error ? event.error : "unsupported";
+            status.textContent = "Fullscreen is unavailable (" + reason + ").";
           });
         }
       }
 
       document.addEventListener("fullscreenchange", () => {
-        if (!telegram) setFullscreenUi(Boolean(document.fullscreenElement));
+        const active = Boolean(document.fullscreenElement);
+        if (active) {
+          setFullscreenUi(true);
+          void lockLandscapeOrientation();
+        } else if (!telegram || !telegram.isFullscreen) {
+          setFullscreenUi(false);
+          unlockPlayerOrientation();
+        }
       });
 
       function enableSound() {
@@ -360,7 +425,9 @@
         const playerVars = {
           autoplay: 1,
           controls: 1,
-          fs: 1,
+          // Fullscreen is handled by the parent app button so Telegram can
+          // expand the whole Mini App, not only the cross-origin YouTube iframe.
+          fs: 0,
           playsinline: 1,
           rel: 0,
           modestbranding: 1,
