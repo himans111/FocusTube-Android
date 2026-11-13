@@ -6,8 +6,8 @@ import { spawnSync } from "node:child_process";
 const htmlPath = path.resolve("tube-player/index.html");
 if (!fs.existsSync(htmlPath)) throw new Error("Missing " + htmlPath);
 const html = fs.readFileSync(htmlPath, "utf8");
-const scripts = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)]
-  .filter((m) => !/\\bsrc\\s*=/.test(m[1]))
+const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+  .filter((m) => !/\bsrc\s*=/.test(m[1]))
   .map((m) => m[2])
   .filter((s) => s.trim());
 if (!scripts.length) throw new Error("No inline JavaScript found");
