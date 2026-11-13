@@ -13,8 +13,8 @@ const html = fs.readFileSync(htmlPath, "utf8");
 const shortHtml = fs.readFileSync(shortPath, "utf8");
 if (html !== shortHtml) throw new Error("p/index.html and tube-player/index.html must be identical");
 
-const scripts = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)]
-  .filter((m) => !/\\bsrc\\s*=/.test(m[1]))
+const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+  .filter((m) => !/\bsrc\s*=/.test(m[1]))
   .map((m) => m[2])
   .filter((s) => s.trim());
 if (!scripts.length) throw new Error("No inline JavaScript found");
