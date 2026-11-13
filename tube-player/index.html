@@ -95,7 +95,10 @@
     }
     #player-stage.is-dragging { opacity: .94; }
     #player-stage.is-dragging #drag-strip { cursor: grabbing; }
+    /* Let YouTube's own fullscreen control receive the tap.
+       A parent overlay here can steal the native control's touch event. */
     #fullscreen-button {
+      display: none !important;
       position: absolute;
       z-index: 5;
       right: 10px;
