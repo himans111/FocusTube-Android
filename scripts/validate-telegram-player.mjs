@@ -11,7 +11,7 @@ const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
   .map((m) => m[2])
   .filter((s) => s.trim());
 if (!scripts.length) throw new Error("No inline JavaScript found");
-for (const feature of ["requestFullscreen", "exitFullscreen", "screen.orientation.lock", "lockLandscapeOrientation", "fullscreenChanged", "fs: 0", "onAutoplayBlocked", "setVolume(100)", "beginHold", "initDataUnsafe"]) {
+for (const feature of ["requestFullscreen", "exitFullscreen", "screen.orientation.lock", "lockLandscapeOrientation", "iframe.requestFullscreen", "fullscreenChanged", "fs: 1", "onAutoplayBlocked", "setVolume(100)", "beginHold", "initDataUnsafe"]) {
   if (!html.includes(feature)) throw new Error("Missing required feature: " + feature);
 }
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "player-check-"));
