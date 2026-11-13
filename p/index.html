@@ -204,6 +204,7 @@
       const app = document.getElementById("app");
       const workspace = document.getElementById("workspace");
       const stage = document.getElementById("player-stage");
+      const videoFrame = document.getElementById("video-frame");
       const fullscreenButton = document.getElementById("fullscreen-button");
       const fullscreenIcon = document.getElementById("fullscreen-icon");
       const soundPrompt = document.getElementById("sound-prompt");
@@ -335,6 +336,21 @@
         return null;
       }
 
+      function resizePlayerToFrame() {
+        if (!player || typeof player.setSize !== "function" || !videoFrame) return;
+        const rect = videoFrame.getBoundingClientRect();
+        if (rect.width < 200 || rect.height < 200) return;
+        player.setSize(Math.round(rect.width), Math.round(rect.height));
+      }
+
+      function schedulePlayerResize() {
+        if (typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(resizePlayerToFrame);
+        } else {
+          resizePlayerToFrame();
+        }
+      }
+
       function setFullscreenUi(value) {
         fullscreen = Boolean(value);
         stage.classList.toggle("fullscreen", fullscreen);
@@ -347,6 +363,7 @@
         playerTop = 0;
         stage.style.left = "0px";
         stage.style.top = "0px";
+        schedulePlayerResize();
       }
 
       function setStatus(message, showExternalVideo = false) {
@@ -540,6 +557,7 @@
               const iframe = event.target.getIframe();
               iframe.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture; fullscreen; web-share");
               iframe.setAttribute("allowfullscreen", "");
+              schedulePlayerResize();
               try {
                 event.target.unMute();
                 event.target.setVolume(100);
@@ -649,7 +667,9 @@
           stage.style.left = playerLeft + "px";
           stage.style.top = playerTop + "px";
         }
+        schedulePlayerResize();
       });
+      window.addEventListener("orientationchange", schedulePlayerResize);
 
       startPlayer();
     })();
