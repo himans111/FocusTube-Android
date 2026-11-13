@@ -314,29 +314,41 @@
         stage.style.top = "0px";
       }
 
-      async function enterBrowserFullscreen() {
-        if (!stage.requestFullscreen) {
-          setFullscreenUi(false);
-          status.textContent = "Fullscreen is not supported on this device.";
-          return;
-        }
-        try {
-          await stage.requestFullscreen({ navigationUI: "hide" });
-          setFullscreenUi(true);
-          void lockLandscapeOrientation();
-        } catch (_) {
-          setFullscreenUi(false);
-          status.textContent = "Fullscreen is not available in this browser.";
-        }
-      }
-
       async function enterFullscreen() {
         if (fullscreen) return;
         status.textContent = "";
-        setFullscreenUi(true);
 
-        // Telegram's native Mini App fullscreen expands beyond the WebView.
-        // The browser orientation lock is a best-effort landscape request.
+        // Prefer the YouTube iframe's native fullscreen request. On Android,
+        // Telegram's WebView host can handle this as a real video fullscreen
+        // surface (unlike expanding the Mini App container alone).
+        const iframe = player && typeof player.getIframe === "function"
+          ? player.getIframe()
+          : null;
+
+        if (iframe && typeof iframe.requestFullscreen === "function") {
+          try {
+            await iframe.requestFullscreen({ navigationUI: "hide" });
+            setFullscreenUi(true);
+            const landscapeLocked = await lockLandscapeOrientation();
+            if (!landscapeLocked) {
+              status.textContent = "Fullscreen is open. Turn on Auto-rotate if the phone stays upright.";
+            }
+            return;
+          } catch (_) {
+            // Continue to Telegram's native fallback below.
+          }
+        }
+
+        if (iframe && typeof iframe.webkitRequestFullscreen === "function") {
+          try {
+            iframe.webkitRequestFullscreen();
+            setFullscreenUi(true);
+            void lockLandscapeOrientation();
+            return;
+          } catch (_) {}
+        }
+
+        // Fallback: this expands the Mini App, but cannot force a rotation.
         if (
           telegram &&
           typeof telegram.requestFullscreen === "function" &&
@@ -344,12 +356,13 @@
         ) {
           try {
             telegram.requestFullscreen();
-            void lockLandscapeOrientation();
+            setFullscreenUi(true);
+            status.textContent = "Turn on Auto-rotate and turn your phone sideways for landscape video.";
             return;
           } catch (_) {}
         }
 
-        await enterBrowserFullscreen();
+        status.textContent = "Use the YouTube fullscreen control. If needed, enable Auto-rotate.";
       }
 
       function exitFullscreen() {
@@ -361,6 +374,7 @@
         }
         unlockPlayerOrientation();
         setFullscreenUi(false);
+        status.textContent = "";
       }
 
       fullscreenButton.addEventListener("click", () => {
@@ -425,9 +439,9 @@
         const playerVars = {
           autoplay: 1,
           controls: 1,
-          // Fullscreen is handled by the parent app button so Telegram can
-          // expand the whole Mini App, not only the cross-origin YouTube iframe.
-          fs: 0,
+          // Keep YouTube's native fullscreen control enabled. Android WebView
+          // handles this request differently from Mini App window expansion.
+          fs: 1,
           playsinline: 1,
           rel: 0,
           modestbranding: 1,
