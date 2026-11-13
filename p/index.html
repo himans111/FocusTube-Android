@@ -98,7 +98,6 @@
     /* Let YouTube's own fullscreen control receive the tap.
        A parent overlay here can steal the native control's touch event. */
     #fullscreen-button {
-      display: none !important;
       position: absolute;
       z-index: 5;
       right: 10px;
@@ -321,37 +320,8 @@
         if (fullscreen) return;
         status.textContent = "";
 
-        // Prefer the YouTube iframe's native fullscreen request. On Android,
-        // Telegram's WebView host can handle this as a real video fullscreen
-        // surface (unlike expanding the Mini App container alone).
-        const iframe = player && typeof player.getIframe === "function"
-          ? player.getIframe()
-          : null;
-
-        if (iframe && typeof iframe.requestFullscreen === "function") {
-          try {
-            await iframe.requestFullscreen({ navigationUI: "hide" });
-            setFullscreenUi(true);
-            const landscapeLocked = await lockLandscapeOrientation();
-            if (!landscapeLocked) {
-              status.textContent = "Fullscreen is open. Turn on Auto-rotate if the phone stays upright.";
-            }
-            return;
-          } catch (_) {
-            // Continue to Telegram's native fallback below.
-          }
-        }
-
-        if (iframe && typeof iframe.webkitRequestFullscreen === "function") {
-          try {
-            iframe.webkitRequestFullscreen();
-            setFullscreenUi(true);
-            void lockLandscapeOrientation();
-            return;
-          } catch (_) {}
-        }
-
-        // Fallback: this expands the Mini App, but cannot force a rotation.
+        // Request fullscreen from Telegram itself. A YouTube iframe fullscreen
+        // request alone cannot reliably hide Telegram's Mini App header.
         if (
           telegram &&
           typeof telegram.requestFullscreen === "function" &&
@@ -359,13 +329,41 @@
         ) {
           try {
             telegram.requestFullscreen();
+            // Telegram confirms asynchronously through fullscreenChanged.
+            // Try landscape now and retry after Telegram confirms fullscreen.
+            void lockLandscapeOrientation();
+            window.setTimeout(() => {
+              if (telegram.isFullscreen) {
+                setFullscreenUi(true);
+                void lockLandscapeOrientation().then(landscapeLocked => {
+                  if (!landscapeLocked && screen.orientation && screen.orientation.type.startsWith("portrait")) {
+                    status.textContent = "Fullscreen is active. Turn on Auto-rotate if the screen stays upright.";
+                  }
+                });
+              } else if (!fullscreen) {
+                status.textContent = "Telegram did not grant fullscreen. Open the Mini App with the fullscreen link.";
+              }
+            }, 900);
+            return;
+          } catch (_) {
+            // Try the browser's fullscreen API if Telegram rejects the request.
+          }
+        }
+
+        const fullscreenTarget = document.documentElement;
+        if (fullscreenTarget.requestFullscreen) {
+          try {
+            await fullscreenTarget.requestFullscreen({ navigationUI: "hide" });
             setFullscreenUi(true);
-            status.textContent = "Turn on Auto-rotate and turn your phone sideways for landscape video.";
+            const landscapeLocked = await lockLandscapeOrientation();
+            if (!landscapeLocked) {
+              status.textContent = "Fullscreen is active. Turn on Auto-rotate if the screen stays upright.";
+            }
             return;
           } catch (_) {}
         }
 
-        status.textContent = "Use the YouTube fullscreen control. If needed, enable Auto-rotate.";
+        status.textContent = "Fullscreen is not supported by this Telegram version.";
       }
 
       function exitFullscreen() {
@@ -398,10 +396,16 @@
             const active = Boolean(telegram.isFullscreen);
             setFullscreenUi(active);
             if (active) {
-              // Retry after Telegram confirms fullscreen; Android often requires this timing.
-              void lockLandscapeOrientation();
+              // Telegram's Mini App is fullscreen now; retry orientation lock
+              // only after the host has confirmed its fullscreen state.
+              void lockLandscapeOrientation().then(landscapeLocked => {
+                if (!landscapeLocked && screen.orientation && screen.orientation.type.startsWith("portrait")) {
+                  status.textContent = "Fullscreen is active. Turn on Auto-rotate if the screen stays upright.";
+                }
+              });
             } else {
               unlockPlayerOrientation();
+              status.textContent = "";
             }
           });
           telegram.onEvent("fullscreenFailed", event => {
@@ -411,6 +415,12 @@
             status.textContent = "Fullscreen is unavailable (" + reason + ").";
           });
         }
+      }
+
+      // Support Mini Apps opened directly with ?mode=fullscreen.
+      if (telegram && telegram.isFullscreen) {
+        setFullscreenUi(true);
+        void lockLandscapeOrientation();
       }
 
       document.addEventListener("fullscreenchange", () => {
@@ -444,7 +454,7 @@
           controls: 1,
           // Keep YouTube's native fullscreen control enabled. Android WebView
           // handles this request differently from Mini App window expansion.
-          fs: 1,
+          fs: 0,
           playsinline: 1,
           rel: 0,
           modestbranding: 1,
