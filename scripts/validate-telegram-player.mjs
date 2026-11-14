@@ -8,17 +8,20 @@ const htmlPath = path.join(root, "tube-player/index.html");
 const shortPath = path.join(root, "p/index.html");
 const cacheBustPath = path.join(root, "p2/index.html");
 const freshPath = path.join(root, "p3/index.html");
+const latestPath = path.join(root, "p4/index.html");
 if (!fs.existsSync(htmlPath)) throw new Error("Missing " + htmlPath);
 if (!fs.existsSync(shortPath)) throw new Error("Missing " + shortPath);
 if (!fs.existsSync(cacheBustPath)) throw new Error("Missing " + cacheBustPath);
 if (!fs.existsSync(freshPath)) throw new Error("Missing " + freshPath);
+if (!fs.existsSync(latestPath)) throw new Error("Missing " + latestPath);
 
 const html = fs.readFileSync(htmlPath, "utf8");
 const shortHtml = fs.readFileSync(shortPath, "utf8");
 const cacheBustHtml = fs.readFileSync(cacheBustPath, "utf8");
 const freshHtml = fs.readFileSync(freshPath, "utf8");
-if (html !== shortHtml || html !== cacheBustHtml || html !== freshHtml) {
-  throw new Error("p/index.html, p2/index.html, p3/index.html and tube-player/index.html must be identical");
+const latestHtml = fs.readFileSync(latestPath, "utf8");
+if (html !== shortHtml || html !== cacheBustHtml || html !== freshHtml || html !== latestHtml) {
+  throw new Error("p/index.html, p2/index.html, p3/index.html, p4/index.html and tube-player/index.html must be identical");
 }
 
 const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
