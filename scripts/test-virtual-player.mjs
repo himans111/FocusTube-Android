@@ -38,7 +38,7 @@ try {
       hasTouch: item.mobile
     });
     const page = await context.newPage();
-    page.on("pageerror", error => failures.push(item.name + ": page error: " + error.message));
+    page.on("pageerror", error => failures.push(item.name + ": page error: " + (error.stack || error.message)));
     await page.route("https://**", route => route.fulfill({
       status: 200,
       contentType: "application/javascript",
@@ -54,20 +54,18 @@ try {
           iframe.id = "mock-youtube-iframe";
           iframe.title = "Mock YouTube player";
           host.replaceWith(iframe);
-          const target = {
-            getIframe: () => iframe,
-            setSize: (width, height) => {
-              iframe.style.width = width + "px";
-              iframe.style.height = height + "px";
-              iframe.width = String(width);
-              iframe.height = String(height);
-            },
-            unMute() {},
-            setVolume() {},
-            playVideo() {}
+          this.getIframe = () => iframe;
+          this.setSize = (width, height) => {
+            iframe.style.width = width + "px";
+            iframe.style.height = height + "px";
+            iframe.width = String(width);
+            iframe.height = String(height);
           };
-          window.__mockPlayer = target;
-          queueMicrotask(() => config.events.onReady({ target }));
+          this.unMute = () => {};
+          this.setVolume = () => {};
+          this.playVideo = () => {};
+          window.__mockPlayer = this;
+          queueMicrotask(() => config.events.onReady({ target: this }));
         }
       };
       window.onYouTubeIframeAPIReady();
@@ -119,6 +117,11 @@ try {
     });
     assert.equal(full.active, true, item.name + ": virtual fullscreen did not activate");
     assert.equal(full.rotated, item.height > item.width, item.name + ": rotation state is incorrect");
+    await page.screenshot({ path: path.join(artifacts, item.name + ".png") });
+    assert.ok(Math.abs((full.frame.x + full.frame.width / 2) - item.width / 2) <= 1,
+      item.name + ": rotated frame is not horizontally centered: " + JSON.stringify(full));
+    assert.ok(Math.abs((full.frame.y + full.frame.height / 2) - item.height / 2) <= 1,
+      item.name + ": rotated frame is not vertically centered: " + JSON.stringify(full));
     assert.ok(full.frame.x <= 1 && full.frame.x + full.frame.width >= item.width - 1,
       item.name + ": video does not cover viewport width: " + JSON.stringify(full));
     assert.ok(full.frame.y <= 1 && full.frame.y + full.frame.height >= item.height - 1,
@@ -128,7 +131,6 @@ try {
     assert.ok(Math.abs(full.iframe.height - full.frame.layoutHeight) <= 1,
       item.name + ": YouTube iframe height does not match layout height: " + JSON.stringify(full));
 
-    await page.screenshot({ path: path.join(artifacts, item.name + ".png") });
     await page.locator("#fullscreen-button").evaluate(button => button.click());
     const restored = await page.evaluate(() => {
       const r = document.querySelector("#player-stage").getBoundingClientRect();

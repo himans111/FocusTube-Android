@@ -111,15 +111,18 @@
       touch-action: manipulation;
     }
     #player-stage.virtual-fullscreen #video-frame {
+      position: absolute;
+      left: 50%;
+      top: 50%;
       width: var(--player-frame-width);
       height: auto;
       aspect-ratio: 16 / 9;
-      transform: none;
+      transform: translate(-50%, -50%);
       transform-origin: center center;
     }
     #player-stage.virtual-fullscreen.virtual-rotated #video-frame {
       width: var(--player-frame-width);
-      transform: rotate(90deg);
+      transform: translate(-50%, -50%) rotate(90deg);
       transform-origin: center center;
     }
     #player-stage.virtual-fullscreen #drag-strip { display: none; }
