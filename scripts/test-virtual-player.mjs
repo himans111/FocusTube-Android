@@ -98,6 +98,19 @@ try {
       status: 200, contentType: "application/javascript", body: ""
     }));
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    // The mobile emulation's innerHeight can differ from the CSS visual
+    // viewport. Mirror Telegram's CSS-pixel viewport values after the meta
+    // viewport has been parsed, before testing the player layout.
+    await page.evaluate(() => {
+      const visual = window.visualViewport;
+      const height = visual && Math.abs((visual.scale || 1) - 1) < 0.02
+        ? visual.height : document.documentElement.clientHeight || window.innerHeight;
+      const webApp = window.Telegram.WebApp;
+      webApp.viewportHeight = height;
+      webApp.viewportStableHeight = height;
+      const notify = window.__telegramEvents.viewportChanged;
+      if (typeof notify === "function") notify({ isStateStable: true });
+    });
 
     const preflight = await page.evaluate(() => ({
       telegramStartParam: window.Telegram && window.Telegram.WebApp &&
@@ -252,14 +265,20 @@ try {
 
     await page.evaluate(() => {
       const webApp = window.Telegram.WebApp;
-      webApp.viewportHeight = window.innerHeight;
-      webApp.viewportStableHeight = window.innerHeight;
+      const visual = window.visualViewport;
+      const height = visual && Math.abs((visual.scale || 1) - 1) < 0.02
+        ? visual.height : document.documentElement.clientHeight || window.innerHeight;
+      webApp.viewportHeight = height;
+      webApp.viewportStableHeight = height;
       window.__telegramEvents.viewportChanged({ isStateStable: true });
     });
-    await page.waitForFunction(() =>
-      parseFloat(getComputedStyle(document.documentElement)
-        .getPropertyValue("--player-viewport-height")) === window.innerHeight
-    );
+    await page.waitForFunction(() => {
+      const visual = window.visualViewport;
+      const height = visual && Math.abs((visual.scale || 1) - 1) < 0.02
+        ? visual.height : document.documentElement.clientHeight || window.innerHeight;
+      return parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue("--player-viewport-height")) === height;
+    });
     await waitForIframeToMatchFrame();
     assert.equal(full.rotated, item.height > item.width, item.name + ": initial rotation state is incorrect");
     assertCoverGeometry({
@@ -273,8 +292,11 @@ try {
     await page.setViewportSize(reversed);
     await page.evaluate(() => {
       const app = window.Telegram.WebApp;
-      app.viewportHeight = window.innerHeight;
-      app.viewportStableHeight = window.innerHeight;
+      const visual = window.visualViewport;
+      const height = visual && Math.abs((visual.scale || 1) - 1) < 0.02
+        ? visual.height : document.documentElement.clientHeight || window.innerHeight;
+      app.viewportHeight = height;
+      app.viewportStableHeight = height;
       const notify = window.__telegramEvents.viewportChanged;
       if (typeof notify === "function") notify({ isStateStable: true });
     });
@@ -295,8 +317,11 @@ try {
     await page.setViewportSize({ width: item.width, height: item.height });
     await page.evaluate(() => {
       const app = window.Telegram.WebApp;
-      app.viewportHeight = window.innerHeight;
-      app.viewportStableHeight = window.innerHeight;
+      const visual = window.visualViewport;
+      const height = visual && Math.abs((visual.scale || 1) - 1) < 0.02
+        ? visual.height : document.documentElement.clientHeight || window.innerHeight;
+      app.viewportHeight = height;
+      app.viewportStableHeight = height;
       const notify = window.__telegramEvents.viewportChanged;
       if (typeof notify === "function") notify({ isStateStable: true });
     });
