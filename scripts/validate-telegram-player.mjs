@@ -95,11 +95,10 @@ for (const feature of required) {
 const forbidden = [
   "document.documentElement.requestFullscreen(",
   "document.exitFullscreen",
-  "fullscreenChanged",
-  "fullscreenFailed",
+  "document.fullscreenchange",
+  "document.fullscreenerror",
   "screen.orientation",
   "orientation.lock",
-  "document.fullscreenElement",
   "document.fullscreenElement",
   "Media-first Mini App",
   "telegram.lockOrientation()"
