@@ -61,7 +61,7 @@ const required = [
   "app.getBoundingClientRect()",
   "appHeight || readPositiveMetric(doc.clientHeight)",
   "--player-frame-height",
-  "landscapeHeight * (9 / 16)",
+  "landscapeWidth * (9 / 16)",
   "iframe.allow = \"autoplay; encrypted-media; picture-in-picture; fullscreen; web-share\"",
   "player.mute()",
   "Tap once to enable sound",
