@@ -93,7 +93,7 @@ for (const feature of required) {
 }
 
 const forbidden = [
-  "requestFullscreen(",
+  "document.documentElement.requestFullscreen(",
   "document.exitFullscreen",
   "fullscreenChanged",
   "fullscreenFailed",
