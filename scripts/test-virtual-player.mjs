@@ -286,31 +286,32 @@ try {
     const full = await readFullGeometry();
     assert.equal(full.active, true, item.name + ": virtual fullscreen did not activate");
 
-    // Telegram metrics can differ from the actual browser app box while the
-    // bottom sheet is animating. Fixed CSS geometry must stay in the app box.
+    // Simulate Telegram expanding its native fullscreen viewport. Both the
+    // Telegram stable-height report and the browser app box must update.
     const telegramStableHeight = Math.max(240, Math.round(full.viewport.height - 37));
     await page.evaluate(height => {
+      document.querySelector("#app").style.height = height + "px";
       const webApp = window.Telegram.WebApp;
       webApp.viewportHeight = height - 9;
       webApp.viewportStableHeight = height;
       window.__telegramEvents.viewportChanged({ isStateStable: true });
     }, telegramStableHeight);
-    await page.waitForFunction(() => {
+    await page.waitForFunction(expected => {
       const app = document.querySelector("#app").getBoundingClientRect();
       const measured = parseFloat(getComputedStyle(document.documentElement)
         .getPropertyValue("--player-viewport-height"));
-      return Math.abs(measured - app.height) <= 1;
-    });
+      return Math.abs(measured - expected) <= 1 && Math.abs(app.height - expected) <= 1;
+    }, telegramStableHeight);
     await waitForIframeToMatchFrame();
     const telegramSized = await readFullGeometry();
     assert.equal(telegramSized.rotated, telegramSized.viewport.height > telegramSized.viewport.width,
-      item.name + ": Telegram's mismatched report distorted orientation");
+      item.name + ": Telegram fullscreen viewport orientation was not applied");
     assertCoverGeometry({
       frame: telegramSized.frame,
       layout: telegramSized.layout,
       iframe: telegramSized.iframe
     }, telegramSized.viewport.width, telegramSized.viewport.height,
-      item.name + " app box despite Telegram metric difference");
+      item.name + " Telegram fullscreen viewport");
 
     await page.screenshot({ path: path.join(artifacts, item.name + ".png") });
 
@@ -366,6 +367,7 @@ try {
     }, restoredOrientation.viewport.width, restoredOrientation.viewport.height,
       item.name + " after returning orientation");
 
+    await page.locator("#tap-shield").click({ position: { x: 20, y: 20 } });
     await page.locator("#fullscreen-button").click();
     const restored = await page.evaluate(() => {
       const r = document.querySelector("#player-stage").getBoundingClientRect();
