@@ -33,7 +33,7 @@ const required = [
   "#player-stage:fullscreen",
   'stage.requestFullscreen({ navigationUI: "hide" })',
   "document.fullscreenElement === stage",
-  "screen.orientation.lock",
+  'orientation.lock("landscape")',
   "aspect-ratio: 16 / 9",
   "display: grid",
   "telegram.requestFullscreen();",
@@ -55,7 +55,7 @@ for (const feature of required) {
 
 const forbidden = [
   "Media-first Mini App",
-  "requestLandscapeOrientationFromTap",
+  "lockLandscapeOrientation",
   "telegram.lockOrientation()",
   "document.documentElement.requestFullscreen"
 ];
