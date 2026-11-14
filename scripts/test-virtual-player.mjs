@@ -82,8 +82,18 @@ try {
           initDataUnsafe: { start_param: "dQw4w9WgXcQ" },
           viewportHeight: window.innerHeight,
           viewportStableHeight: window.innerHeight,
+          isFullscreen: false,
           ready() { window.__telegramReady = true; },
           expand() { window.__telegramExpanded = true; },
+          requestFullscreen() {
+            this.isFullscreen = true;
+            window.__telegramFullscreenRequests = (window.__telegramFullscreenRequests || 0) + 1;
+            if (window.__telegramEvents.fullscreenChanged) window.__telegramEvents.fullscreenChanged();
+          },
+          exitFullscreen() {
+            this.isFullscreen = false;
+            if (window.__telegramEvents.fullscreenChanged) window.__telegramEvents.fullscreenChanged();
+          },
           setHeaderColor() {},
           setBackgroundColor() {},
           onEvent(name, handler) { window.__telegramEvents[name] = handler; }
@@ -159,6 +169,9 @@ try {
       ready: window.__telegramReady,
       expanded: window.__telegramExpanded,
       viewportListener: typeof window.__telegramEvents.viewportChanged === "function",
+      fullscreenListener: typeof window.__telegramEvents.fullscreenChanged === "function",
+      telegramFullscreenRequests: window.__telegramFullscreenRequests || 0,
+      telegramIsFullscreen: window.Telegram.WebApp.isFullscreen,
       videoId: window.__mockPlayerConfig && window.__mockPlayerConfig.videoId,
       fullscreenParam: window.__mockPlayerConfig &&
         window.__mockPlayerConfig.playerVars.fs,
@@ -170,6 +183,9 @@ try {
     assert.equal(boot.ready, true, item.name + ": Telegram ready() was not called");
     assert.equal(boot.expanded, true, item.name + ": Telegram expand() was not called");
     assert.equal(boot.viewportListener, true, item.name + ": Telegram viewportChanged listener missing");
+    assert.equal(boot.fullscreenListener, true, item.name + ": Telegram fullscreenChanged listener missing");
+    assert.ok(boot.telegramFullscreenRequests >= 1, item.name + ": Telegram requestFullscreen was not called on launch");
+    assert.equal(boot.telegramIsFullscreen, true, item.name + ": Telegram did not enter fullscreen on launch");
     assert.equal(boot.videoId, "dQw4w9WgXcQ", item.name + ": Telegram start_param was not parsed");
     assert.equal(boot.fullscreenParam, 0, item.name + ": expected website-owned fullscreen control");
     assert.ok(boot.playerCalls.includes("unMute"), item.name + ": sound-first autoplay was not attempted");
@@ -189,33 +205,30 @@ try {
       item.name + ": sound prompt did not disappear after user gesture");
 
     const initial = await page.evaluate(() => {
-      const stage = document.querySelector("#player-stage").getBoundingClientRect();
+      const stage = document.querySelector("#player-stage");
+      const stageRect = stage.getBoundingClientRect();
       const app = document.querySelector("#app").getBoundingClientRect();
       const frame = document.querySelector("#video-frame");
+      const frameRect = frame.getBoundingClientRect();
       const iframe = document.querySelector("#mock-youtube-iframe");
       return {
+        active: stage.classList.contains("virtual-fullscreen"),
         viewport: { width: app.width, height: app.height },
-        stage: { x: stage.x, y: stage.y, width: stage.width, height: stage.height },
+        stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
+        frame: { x: frameRect.x, y: frameRect.y, width: frameRect.width, height: frameRect.height },
         layout: { width: frame.clientWidth, height: frame.clientHeight },
-        iframe: {
-          width: parseFloat(getComputedStyle(iframe).width),
-          height: parseFloat(getComputedStyle(iframe).height)
-        }
+        iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) }
       };
     });
-    const expectedMiniWidth = Math.min(initial.viewport.width, 640, initial.viewport.height * 16 / 9);
-    approx(initial.stage.width, expectedMiniWidth, 1,
-      item.name + ": normal player should use the centered responsive mini-player size");
-    approx(initial.stage.height, expectedMiniWidth * 9 / 16, 1,
-      item.name + ": normal player should keep 16:9 ratio");
-    approx(initial.stage.x + initial.stage.width / 2, initial.viewport.width / 2, 1,
-      item.name + ": normal player is not horizontally centered");
-    approx(initial.stage.y + initial.stage.height / 2, initial.viewport.height / 2, 1,
-      item.name + ": normal player is not vertically centered");
-    approx(initial.iframe.width, initial.layout.width, 1,
-      item.name + ": initial YouTube iframe width mismatch");
-    approx(initial.iframe.height, initial.layout.height, 1,
-      item.name + ": initial YouTube iframe height mismatch");
+    assert.equal(initial.active, true,
+      item.name + ": video did not enter fullscreen automatically when opened");
+    approx(initial.stage.width, initial.viewport.width, 1,
+      item.name + ": fullscreen stage width does not match app viewport");
+    approx(initial.stage.height, initial.viewport.height, 1,
+      item.name + ": fullscreen stage height does not match app viewport");
+    assertCoverGeometry({
+      frame: initial.frame, layout: initial.layout, iframe: initial.iframe
+    }, initial.viewport.width, initial.viewport.height, item.name + " automatic fullscreen");
 
     assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "true",
       item.name + ": controls should begin hidden");
@@ -225,6 +238,11 @@ try {
     await page.waitForTimeout(2600);
     assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "true",
       item.name + ": controls did not auto-hide");
+    await page.locator("#tap-shield").click({ position: { x: 20, y: 20 } });
+    await page.locator("#fullscreen-button").click();
+    await page.waitForFunction(() =>
+      !document.querySelector("#player-stage").classList.contains("virtual-fullscreen")
+    );
     await page.locator("#tap-shield").click({ position: { x: 20, y: 20 } });
     await page.locator("#fullscreen-button").click();
     await page.waitForFunction(() =>

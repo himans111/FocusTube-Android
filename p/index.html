@@ -425,17 +425,19 @@
           : telegramCurrentHeight || telegramStableHeight;
 
         const width = Math.max(1, Math.round(
+          (visualViewportUsable ? readPositiveMetric(vv.width) : 0) ||
           appWidth || readPositiveMetric(doc.clientWidth) ||
-          readPositiveMetric(window.innerWidth) ||
-          (visualViewportUsable ? readPositiveMetric(vv.width) : 0) || 1
+          readPositiveMetric(window.innerWidth) || 1
         ));
-        // The visible app box wins because it is the coordinate space used by
-        // position:fixed. Telegram metrics are fallbacks only when that box
-        // cannot yet be measured (first paint / webview bootstrap).
+        // Telegram's stable viewport is authoritative after native fullscreen
+        // has been confirmed; otherwise use the CSS app viewport coordinates.
+        const telegramFullscreenHeight = telegram && telegram.isFullscreen
+          ? telegramHeight : 0;
         const height = Math.max(1, Math.round(
-          appHeight || readPositiveMetric(doc.clientHeight) ||
-          readPositiveMetric(window.innerHeight) || telegramHeight ||
-          (visualViewportUsable ? readPositiveMetric(vv.height) : 0) || 1
+          telegramFullscreenHeight || appHeight ||
+          (visualViewportUsable ? readPositiveMetric(vv.height) : 0) ||
+          readPositiveMetric(doc.clientHeight) ||
+          readPositiveMetric(window.innerHeight) || telegramHeight || 1
         ));
 
         viewportWidth = width;
@@ -454,6 +456,27 @@
         rootStyle.setProperty("--player-frame-height", landscapeHeight + "px");
         stage.classList.toggle("virtual-rotated", Boolean(fullscreen && height > width));
         schedulePlayerResize();
+      }
+
+      function requestTelegramFullscreen() {
+        if (!telegram || typeof telegram.requestFullscreen !== "function") return false;
+        if (telegram.isFullscreen) return true;
+        try {
+          telegram.requestFullscreen();
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function exitTelegramFullscreen() {
+        if (!telegram || typeof telegram.exitFullscreen !== "function" || !telegram.isFullscreen) return false;
+        try {
+          telegram.exitFullscreen();
+          return true;
+        } catch (_) {
+          return false;
+        }
       }
 
       function setFullscreenUi(value) {
@@ -514,12 +537,14 @@
       }
 
       function enterVirtualLandscape() {
+        requestTelegramFullscreen();
         setFullscreenUi(true);
         setStatus("");
         setControlsVisible(true, true);
       }
 
       function exitVirtualLandscape() {
+        exitTelegramFullscreen();
         setFullscreenUi(false);
         setStatus("");
         setControlsVisible(true, true);
@@ -561,6 +586,8 @@
           telegram.ready();
           if (typeof telegram.onEvent === "function") {
             try { telegram.onEvent("viewportChanged", handleTelegramViewportChanged); } catch (_) {}
+            try { telegram.onEvent("fullscreenChanged", updateViewportMetrics); } catch (_) {}
+            try { telegram.onEvent("fullscreenFailed", updateViewportMetrics); } catch (_) {}
           }
           telegram.expand();
           if (typeof telegram.setHeaderColor === "function") telegram.setHeaderColor("#000000");
@@ -623,6 +650,16 @@
                 event.target.setVolume(100);
                 event.target.playVideo();
               } catch (_) {}
+              // Retry once after the iframe's first paint. Autoplay policy may
+              // still reject audible playback and invoke onAutoplayBlocked.
+              window.setTimeout(() => {
+                if (!player || autoplayWasBlocked) return;
+                try {
+                  player.unMute();
+                  player.setVolume(100);
+                  player.playVideo();
+                } catch (_) {}
+              }, 350);
             },
             onStateChange(event) {
               if (event.data === 1) {
@@ -662,6 +699,11 @@
           setStatus("");
           return;
         }
+        // Open edge-to-edge as soon as a valid video is supplied. Telegram's
+        // native fullscreen removes app chrome; the CSS stage is the fallback.
+        requestTelegramFullscreen();
+        setFullscreenUi(true);
+        setControlsVisible(false, false);
         const api = document.createElement("script");
         api.src = "https://www.youtube.com/iframe_api";
         api.async = true;
