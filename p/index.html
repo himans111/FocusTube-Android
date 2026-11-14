@@ -391,6 +391,8 @@
             telegram.isVersionAtLeast("8.0")) {
           try {
             telegram.requestFullscreen();
+            // Try orientation lock again after the host accepts fullscreen.
+            requestLandscapeOrientationFromTap();
             setStatus(reason + " Telegram fullscreen fallback आज़माया जा रहा है।");
             return;
           } catch (_) {}
@@ -421,10 +423,11 @@
             return;
           }
 
-          const orientationRequest = requestLandscapeOrientationFromTap();
           Promise.resolve(fullscreenRequest).then(() => {
             setFullscreenUi(true);
-            return orientationRequest;
+            // Orientation lock is requested only after the browser has
+            // actually entered fullscreen; Android requires this ordering.
+            return requestLandscapeOrientationFromTap();
           }).then(landscapeLocked => {
             if (!landscapeLocked && fullscreen) {
               setStatus("वीडियो fullscreen खुला है। इस WebView में Auto-rotate lock उपलब्ध नहीं है।");
@@ -474,13 +477,15 @@
             const active = Boolean(telegram.isFullscreen) || document.fullscreenElement === stage;
             setFullscreenUi(active);
             if (active) {
-              // Do not lock Telegram's current orientation here; the device must
-              // remain free to rotate after the Mini App enters fullscreen.
-              if (landscapeLockState === "unavailable" || landscapeLockState === "rejected") {
-                setStatus("Fullscreen खुला है। Landscape के लिए Auto-rotate चालू करके फोन घुमाएँ।");
-              } else {
-                setStatus("");
-              }
+              // Retry after Telegram confirms app fullscreen; orientation lock
+              // can be rejected before the fullscreen state is actually active.
+              requestLandscapeOrientationFromTap().then(landscapeLocked => {
+                if (!landscapeLocked) {
+                  setStatus("Fullscreen खुला है, लेकिन Telegram WebView ने landscape lock नहीं दिया।");
+                } else {
+                  setStatus("");
+                }
+              });
             } else {
               unlockPlayerOrientation();
               setStatus("");
