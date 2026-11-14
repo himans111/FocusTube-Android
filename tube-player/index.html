@@ -12,8 +12,6 @@
       background: #000;
       --player-viewport-width: 100vw;
       --player-viewport-height: 100vh;
-      --player-viewport-left: 0px;
-      --player-viewport-top: 0px;
       --player-frame-width: min(100vw, 177.7778dvh);
     }
     * { box-sizing: border-box; }
@@ -93,10 +91,8 @@
     #player-stage.virtual-fullscreen {
       position: fixed !important;
       inset: 0 !important;
-      left: var(--player-viewport-left) !important;
-      top: var(--player-viewport-top) !important;
-      right: auto !important;
-      bottom: auto !important;
+      left: 0 !important;
+      top: 0 !important;
       transform: none !important;
       width: var(--player-viewport-width) !important;
       height: var(--player-viewport-height) !important;
@@ -433,18 +429,10 @@
           telegramHeight || visualHeight || readPositiveMetric(doc.clientHeight) ||
           readPositiveMetric(window.innerHeight) || readPositiveMetric(app.clientHeight) || 1
         ));
-        const left = visualViewportUsable
-          ? Math.max(0, Math.round(Number(vv.offsetLeft) || 0)) : 0;
-        const top = visualViewportUsable
-          ? Math.max(0, Math.round(Number(vv.offsetTop) || 0)) : 0;
-
         viewportWidth = width;
         viewportHeight = height;
         rootStyle.setProperty("--player-viewport-width", width + "px");
         rootStyle.setProperty("--player-viewport-height", height + "px");
-        rootStyle.setProperty("--player-viewport-left", left + "px");
-        rootStyle.setProperty("--player-viewport-top", top + "px");
-
         // Size the 16:9 source frame from the visible viewport. CSS rotation
         // turns portrait screens into landscape video without device rotation.
         const longestSide = Math.max(width, height);
