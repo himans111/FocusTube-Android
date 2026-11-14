@@ -68,6 +68,18 @@
       border: 0;
       background: #000;
     }
+    /* While the custom control is hidden, this transparent layer catches one
+       tap and reveals it. When controls are visible it becomes click-through,
+       so YouTube playback/seek controls remain usable. */
+    #tap-shield {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      background: transparent;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    #player-stage.controls-visible #tap-shield { pointer-events: none; }
     /* Telegram fullscreen fills the Mini App viewport. Keep the actual
        YouTube surface 16:9 and center it instead of stretching it to portrait. */
     /* Fullscreen the player box itself so the exit button stays inside it. */
@@ -95,7 +107,7 @@
     #player-stage.fullscreen #video-frame,
     #player-stage:fullscreen #video-frame,
     #player-stage:-webkit-full-screen #video-frame {
-      width: min(100%, 177.7778dvh);
+      width: min(100vw, 177.7778dvh);
       height: auto;
       aspect-ratio: 16 / 9;
     }
@@ -117,6 +129,13 @@
       padding-top: 5px;
       touch-action: none;
       cursor: grab;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .16s ease;
+    }
+    #player-stage.controls-visible #drag-strip {
+      opacity: 1;
+      pointer-events: auto;
     }
     #drag-strip::after {
       content: "";
@@ -147,6 +166,16 @@
       place-items: center;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .16s ease, visibility .16s ease;
+      touch-action: manipulation;
+    }
+    #player-stage.controls-visible #fullscreen-button {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
     }
     #fullscreen-button:active { background: rgba(0,0,0,.62); }
     #fullscreen-button svg { width: 24px; height: 24px; display: block; }
@@ -189,8 +218,9 @@
     <section id="player-stage" aria-label="YouTube video">
       <div id="video-frame">
         <div id="player"></div>
+        <div id="tap-shield" aria-label="Tap to show player controls"></div>
         <div id="drag-strip" aria-label="Hold and drag video"></div>
-        <button id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Fullscreen">
+        <button id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Fullscreen" aria-hidden="true" tabindex="-1">
           <svg id="fullscreen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>
             <path d="M8 8 3 3M16 8l5-5M8 16l-5 5M16 16l5 5"/>
@@ -213,6 +243,7 @@
       const videoFrame = document.getElementById("video-frame");
       const fullscreenButton = document.getElementById("fullscreen-button");
       const fullscreenIcon = document.getElementById("fullscreen-icon");
+      const tapShield = document.getElementById("tap-shield");
       const soundPrompt = document.getElementById("sound-prompt");
       const status = document.getElementById("status");
       const dragStrip = document.getElementById("drag-strip");
@@ -227,6 +258,10 @@
       let playerLeft = 0;
       let playerTop = 0;
       let landscapeLockState = "not-requested";
+      let controlsHideTimer = null;
+      let shieldPointer = null;
+      let telegramFullscreenUnavailable = false;
+      let fullscreenPendingTimer = null;
 
       function requestLandscapeOrientationFromTap() {
         const orientation = window.screen && window.screen.orientation;
@@ -356,14 +391,30 @@
         stage.classList.toggle("fullscreen", fullscreen);
         fullscreenButton.setAttribute("aria-label", fullscreen ? "Exit fullscreen" : "Enter fullscreen");
         fullscreenButton.title = fullscreen ? "Exit fullscreen" : "Fullscreen";
-        fullscreenIcon.innerHTML = fullscreen
-          ? '<path d="M8 3v5H3M16 3v5h5M3 16h5v5M21 16h-5v5"/>'
-          : '<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><path d="M8 8 3 3M16 8l5-5M8 16l-5 5M16 16l5 5"/>';
         playerLeft = 0;
         playerTop = 0;
         stage.style.left = "0px";
         stage.style.top = "0px";
         schedulePlayerResize();
+      }
+
+      function setControlsVisible(visible, autoHide = true) {
+        const shown = Boolean(visible);
+        stage.classList.toggle("controls-visible", shown);
+        fullscreenButton.setAttribute("aria-hidden", shown ? "false" : "true");
+        fullscreenButton.tabIndex = shown ? 0 : -1;
+        if (controlsHideTimer) {
+          window.clearTimeout(controlsHideTimer);
+          controlsHideTimer = null;
+        }
+        if (shown && autoHide) {
+          controlsHideTimer = window.setTimeout(() => {
+            stage.classList.remove("controls-visible");
+            fullscreenButton.setAttribute("aria-hidden", "true");
+            fullscreenButton.tabIndex = -1;
+            controlsHideTimer = null;
+          }, 2500);
+        }
       }
 
       function setStatus(message, showExternalVideo = false) {
@@ -384,85 +435,115 @@
         status.appendChild(link);
       }
 
-      function requestTelegramFullscreenFallback(reason) {
-        if (telegram && typeof telegram.requestFullscreen === "function" &&
-            typeof telegram.isVersionAtLeast === "function" &&
-            telegram.isVersionAtLeast("8.0")) {
-          try {
-            telegram.requestFullscreen();
-            // Try orientation lock again after the host accepts fullscreen.
-            requestLandscapeOrientationFromTap();
-            setStatus(reason + " Telegram fullscreen fallback आज़माया जा रहा है।");
-            return;
-          } catch (_) {}
-        }
-        setStatus(reason, true);
-      }
-
-      function enterFullscreen() {
-        if (fullscreen) {
-          exitFullscreen();
+      function requestBrowserFullscreenFromTap() {
+        if (!stage || typeof stage.requestFullscreen !== "function") {
+          setStatus("इस WebView में browser fullscreen उपलब्ध नहीं है।");
           return;
         }
 
-        setStatus("वीडियो fullscreen खोल रहे हैं…");
-
-        // Fullscreen the player BOX, not just the document or the iframe.
-        // This keeps our single fullscreen/exit button inside the fullscreen
-        // surface. Both API requests are issued in the same user tap.
-        if (typeof stage.requestFullscreen === "function") {
-          let fullscreenRequest;
-          try {
-            fullscreenRequest = stage.requestFullscreen({ navigationUI: "hide" });
-          } catch (error) {
-            requestTelegramFullscreenFallback(
-              "वीडियो बॉक्स fullscreen अस्वीकार हुआ (" +
-              (error && error.name ? error.name : "error") + ")।"
-            );
-            return;
-          }
-
-          Promise.resolve(fullscreenRequest).then(() => {
-            setFullscreenUi(true);
-            // Orientation lock is requested only after the browser has
-            // actually entered fullscreen; Android requires this ordering.
+        // Secondary route. Telegram host fullscreen is always attempted first.
+        try {
+          const request = stage.requestFullscreen({ navigationUI: "hide" });
+          Promise.resolve(request).then(() => {
+            const active = document.fullscreenElement === stage;
+            setFullscreenUi(active);
+            if (!active) return false;
             return requestLandscapeOrientationFromTap();
-          }).then(landscapeLocked => {
-            if (!landscapeLocked && fullscreen) {
-              setStatus("वीडियो fullscreen खुला है। इस WebView में Auto-rotate lock उपलब्ध नहीं है।");
-            } else {
+          }).then(locked => {
+            if (fullscreen && !locked) {
+              setStatus("Browser fullscreen चालू है, लेकिन इस WebView ने landscape lock की अनुमति नहीं दी।");
+            } else if (fullscreen) {
               setStatus("");
             }
           }).catch(error => {
             const name = error && error.name ? error.name : "NotAllowedError";
-            requestTelegramFullscreenFallback(
-              "Android WebView ने video-box fullscreen रोक दिया (" + name + ")।"
-            );
+            setFullscreenUi(Boolean(telegram && telegram.isFullscreen));
+            setStatus("Browser fullscreen अस्वीकार हुआ (" + name + ")। Telegram host की अनुमति आवश्यक हो सकती है।");
           });
-          return;
+        } catch (error) {
+          const name = error && error.name ? error.name : "NotAllowedError";
+          setStatus("Browser fullscreen अस्वीकार हुआ (" + name + ")।");
+        }
+      }
+
+      function enterFullscreen() {
+        if (telegram && !telegramFullscreenUnavailable &&
+            typeof telegram.requestFullscreen === "function" &&
+            (typeof telegram.isVersionAtLeast !== "function" || telegram.isVersionAtLeast("8.0"))) {
+          try {
+            // Primary route: fullscreen the Telegram Mini App host itself.
+            // This is different from requesting fullscreen on the YouTube iframe.
+            telegram.requestFullscreen();
+            if (fullscreenPendingTimer) window.clearTimeout(fullscreenPendingTimer);
+            fullscreenPendingTimer = window.setTimeout(() => {
+              fullscreenPendingTimer = null;
+              if (telegram.isFullscreen || document.fullscreenElement === stage) return;
+              telegramFullscreenUnavailable = true;
+              setStatus("Telegram fullscreen का जवाब नहीं मिला। उसी बटन को फिर दबाएँ; अगली कोशिश browser fullscreen होगी।");
+              setControlsVisible(true, true);
+            }, 1800);
+            setStatus("Telegram fullscreen अनुरोध भेजा गया…");
+            return;
+          } catch (_) {
+            telegramFullscreenUnavailable = true;
+          }
         }
 
-        requestTelegramFullscreenFallback("इस WebView में browser fullscreen API उपलब्ध नहीं है।");
+        // Secondary route: native browser element fullscreen, only on a tap.
+        requestBrowserFullscreenFromTap();
       }
 
       function exitFullscreen() {
-        if (!fullscreen && !(telegram && telegram.isFullscreen) && !document.fullscreenElement) return;
-        if (document.fullscreenElement && document.exitFullscreen) {
-          document.exitFullscreen().catch(() => {});
+        const hostActive = Boolean(telegram && telegram.isFullscreen);
+        const browserActive = Boolean(document.fullscreenElement);
+        if (!fullscreen && !hostActive && !browserActive) return;
+
+        if (browserActive && document.exitFullscreen) {
+          try { Promise.resolve(document.exitFullscreen()).catch(() => {}); } catch (_) {}
         }
-        if (telegram && typeof telegram.exitFullscreen === "function" && telegram.isFullscreen) {
+        if (hostActive && telegram && typeof telegram.exitFullscreen === "function") {
           try { telegram.exitFullscreen(); } catch (_) {}
         }
         unlockPlayerOrientation();
         setFullscreenUi(false);
         setStatus("");
+        setControlsVisible(true, true);
       }
 
-      fullscreenButton.addEventListener("click", () => {
-        if (fullscreen) exitFullscreen();
-        else enterFullscreen();
+      fullscreenButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        setControlsVisible(true, true);
+        if (fullscreen || document.fullscreenElement || (telegram && telegram.isFullscreen)) {
+          exitFullscreen();
+        } else {
+          enterFullscreen();
+        }
       });
 
+      tapShield.addEventListener("pointerdown", event => {
+        if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+        shieldPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        try { tapShield.setPointerCapture(event.pointerId); } catch (_) {}
+      });
+
+      tapShield.addEventListener("pointerup", event => {
+        if (!shieldPointer || shieldPointer.id !== event.pointerId) return;
+        const moved = Math.hypot(event.clientX - shieldPointer.x, event.clientY - shieldPointer.y);
+        shieldPointer = null;
+        if (moved <= 14) {
+          event.preventDefault();
+          setControlsVisible(true, true);
+        }
+      });
+
+      tapShield.addEventListener("pointercancel", () => { shieldPointer = null; });
+      tapShield.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setControlsVisible(true, true);
+        }
+      });
       if (telegram) {
         try {
           telegram.ready();
@@ -473,14 +554,18 @@
 
         if (typeof telegram.onEvent === "function") {
           telegram.onEvent("fullscreenChanged", () => {
+            if (fullscreenPendingTimer) {
+              window.clearTimeout(fullscreenPendingTimer);
+              fullscreenPendingTimer = null;
+            }
             const active = Boolean(telegram.isFullscreen) || document.fullscreenElement === stage;
             setFullscreenUi(active);
             if (active) {
-              // Retry after Telegram confirms app fullscreen; orientation lock
-              // can be rejected before the fullscreen state is actually active.
+              // Telegram's lockOrientation() locks the current mode; it cannot
+              // be used to rotate a portrait Mini App into landscape.
               requestLandscapeOrientationFromTap().then(landscapeLocked => {
                 if (!landscapeLocked) {
-                  setStatus("Fullscreen खुला है, लेकिन Telegram WebView ने landscape lock नहीं दिया।");
+                  setStatus("Telegram fullscreen चालू है। इस WebView ने landscape rotation की अनुमति नहीं दी।");
                 } else {
                   setStatus("");
                 }
@@ -491,15 +576,23 @@
             }
           });
           telegram.onEvent("fullscreenFailed", event => {
-            setFullscreenUi(false);
-            unlockPlayerOrientation();
+            if (fullscreenPendingTimer) {
+              window.clearTimeout(fullscreenPendingTimer);
+              fullscreenPendingTimer = null;
+            }
             const reason = event && event.error ? event.error : "UNSUPPORTED";
+            if (reason === "ALREADY_FULLSCREEN" && telegram.isFullscreen) {
+              setFullscreenUi(true);
+              return;
+            }
+            telegramFullscreenUnavailable = true;
+            setFullscreenUi(Boolean(document.fullscreenElement));
+            unlockPlayerOrientation();
             const reasonText = reason === "UNSUPPORTED"
-              ? "Telegram Android ने Mini App fullscreen को unsupported बताया।"
-              : reason === "ALREADY_FULLSCREEN"
-                ? "Telegram पहले से fullscreen में है।"
-                : "Telegram fullscreen request असफल हुई: " + reason;
-            setStatus(reasonText, reason !== "ALREADY_FULLSCREEN");
+              ? "Telegram ने host fullscreen असमर्थ बताया। अगली बार उसी बटन को दबाने पर browser fallback आज़माया जाएगा।"
+              : "Telegram fullscreen असफल हुई: " + reason + "। अगली बार browser fallback आज़माया जाएगा।";
+            setStatus(reasonText);
+            setControlsVisible(true, true);
           });
         }
       }
@@ -676,6 +769,7 @@
       });
       window.addEventListener("orientationchange", schedulePlayerResize);
 
+      setControlsVisible(false, false);
       startPlayer();
     })();
   </script>

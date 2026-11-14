@@ -37,6 +37,12 @@ const required = [
   "aspect-ratio: 16 / 9",
   "display: grid",
   "telegram.requestFullscreen();",
+  "telegramFullscreenUnavailable",
+  'id="tap-shield"',
+  'tapShield.addEventListener("pointerup"',
+  "setControlsVisible(false, false)",
+  "controls-visible #fullscreen-button",
+  "}, 2500);",
   "telegram.exitFullscreen()",
   "requestLandscapeOrientationFromTap",
   "fullscreenChanged",
@@ -70,6 +76,16 @@ if (startup.includes("telegram.requestFullscreen()")) {
   throw new Error("Fullscreen must not auto-request from the page-load block");
 }
 
+
+const enterIndex = html.indexOf("function enterFullscreen()");
+const exitIndex = html.indexOf("function exitFullscreen()", enterIndex);
+const enterBody = html.slice(enterIndex, exitIndex);
+const hostRequestIndex = enterBody.indexOf("telegram.requestFullscreen();");
+const browserFallbackIndex = enterBody.indexOf("requestBrowserFullscreenFromTap();");
+if (enterIndex < 0 || exitIndex < 0 || hostRequestIndex < 0 || browserFallbackIndex < 0 || hostRequestIndex > browserFallbackIndex) {
+  throw new Error("Telegram host fullscreen must be primary; browser fullscreen is secondary");
+}
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "player-check-"));
 try {
   scripts.forEach((source, i) => {
@@ -82,4 +98,4 @@ try {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-console.log("PASS: player HTML, identical deployment copies, responsive fullscreen frame, Telegram event flow, and inline JavaScript syntax.");
+console.log("PASS: identical deployment copies, Telegram-host-first fullscreen, touch-to-reveal auto-hide control, responsive frame, and inline JavaScript syntax.");
