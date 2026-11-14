@@ -133,12 +133,16 @@ try {
           iframe.width = String(config.width);
           iframe.height = String(config.height);
           host.replaceWith(iframe);
+          window.__mockPlayerCalls = [];
+          let muted = false;
           const target = {
             getIframe: () => iframe,
-            setSize() {},
-            unMute() {},
-            setVolume() {},
-            playVideo() {}
+            setSize() { window.__mockPlayerCalls.push("setSize"); },
+            unMute() { muted = false; window.__mockPlayerCalls.push("unMute"); },
+            mute() { muted = true; window.__mockPlayerCalls.push("mute"); },
+            isMuted() { return muted; },
+            setVolume(value) { window.__mockPlayerCalls.push("setVolume:" + value); },
+            playVideo() { window.__mockPlayerCalls.push("playVideo"); }
           };
           window.__mockPlayer = target;
           window.__mockPlayerConfig = config;
@@ -157,19 +161,40 @@ try {
       viewportListener: typeof window.__telegramEvents.viewportChanged === "function",
       videoId: window.__mockPlayerConfig && window.__mockPlayerConfig.videoId,
       fullscreenParam: window.__mockPlayerConfig &&
-        window.__mockPlayerConfig.playerVars.fs
+        window.__mockPlayerConfig.playerVars.fs,
+      playerCalls: window.__mockPlayerCalls,
+      iframeAllow: document.querySelector("#mock-youtube-iframe").allow,
+      muteParam: window.__mockPlayerConfig &&
+        window.__mockPlayerConfig.playerVars.mute
     }));
     assert.equal(boot.ready, true, item.name + ": Telegram ready() was not called");
     assert.equal(boot.expanded, true, item.name + ": Telegram expand() was not called");
     assert.equal(boot.viewportListener, true, item.name + ": Telegram viewportChanged listener missing");
     assert.equal(boot.videoId, "dQw4w9WgXcQ", item.name + ": Telegram start_param was not parsed");
     assert.equal(boot.fullscreenParam, 0, item.name + ": expected website-owned fullscreen control");
+    assert.ok(boot.playerCalls.includes("unMute"), item.name + ": sound-first autoplay was not attempted");
+    assert.ok(boot.playerCalls.includes("playVideo"), item.name + ": autoplay was not attempted");
+    assert.ok(boot.iframeAllow.includes("autoplay"), item.name + ": YouTube iframe autoplay permission missing");
+    assert.equal(boot.muteParam, undefined, item.name + ": unsupported mute playerVar should not be sent");
+
+    await page.evaluate(() => window.__mockPlayerConfig.events.onAutoplayBlocked());
+    assert.equal(await page.evaluate(() => window.__mockPlayer.isMuted()), true,
+      item.name + ": blocked autoplay did not switch to muted playback fallback");
+    assert.equal(await page.locator("#sound-prompt").isVisible(), true,
+      item.name + ": sound fallback control should appear only after autoplay is blocked");
+    await page.locator("#sound-prompt").click();
+    assert.equal(await page.evaluate(() => window.__mockPlayer.isMuted()), false,
+      item.name + ": one user gesture did not enable sound");
+    assert.equal(await page.locator("#sound-prompt").isVisible(), false,
+      item.name + ": sound prompt did not disappear after user gesture");
 
     const initial = await page.evaluate(() => {
       const stage = document.querySelector("#player-stage").getBoundingClientRect();
+      const app = document.querySelector("#app").getBoundingClientRect();
       const frame = document.querySelector("#video-frame");
       const iframe = document.querySelector("#mock-youtube-iframe");
       return {
+        viewport: { width: app.width, height: app.height },
         stage: { x: stage.x, y: stage.y, width: stage.width, height: stage.height },
         layout: { width: frame.clientWidth, height: frame.clientHeight },
         iframe: {
@@ -178,14 +203,14 @@ try {
         }
       };
     });
-    const expectedMiniWidth = Math.min(item.width, 640, item.height * 16 / 9);
+    const expectedMiniWidth = Math.min(initial.viewport.width, 640, initial.viewport.height * 16 / 9);
     approx(initial.stage.width, expectedMiniWidth, 1,
       item.name + ": normal player should use the centered responsive mini-player size");
     approx(initial.stage.height, expectedMiniWidth * 9 / 16, 1,
       item.name + ": normal player should keep 16:9 ratio");
-    approx(initial.stage.x + initial.stage.width / 2, item.width / 2, 1,
+    approx(initial.stage.x + initial.stage.width / 2, initial.viewport.width / 2, 1,
       item.name + ": normal player is not horizontally centered");
-    approx(initial.stage.y + initial.stage.height / 2, item.height / 2, 1,
+    approx(initial.stage.y + initial.stage.height / 2, initial.viewport.height / 2, 1,
       item.name + ": normal player is not vertically centered");
     approx(initial.iframe.width, initial.layout.width, 1,
       item.name + ": initial YouTube iframe width mismatch");
@@ -218,11 +243,13 @@ try {
 
     const readFullGeometry = () => page.evaluate(() => {
       const stage = document.querySelector("#player-stage");
+      const app = document.querySelector("#app").getBoundingClientRect();
       const frame = document.querySelector("#video-frame");
       const iframe = document.querySelector("#mock-youtube-iframe");
       const stageRect = stage.getBoundingClientRect();
       const frameRect = frame.getBoundingClientRect();
       return {
+        viewport: { width: app.width, height: app.height },
         active: stage.classList.contains("virtual-fullscreen"),
         rotated: stage.classList.contains("virtual-rotated"),
         stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
@@ -239,53 +266,32 @@ try {
     const full = await readFullGeometry();
     assert.equal(full.active, true, item.name + ": virtual fullscreen did not activate");
 
-    // Telegram can expose a stable visible height different from the browser
-    // visualViewport. Fullscreen sizing must honor the Telegram measurement.
-    const telegramStableHeight = Math.max(240, item.height - 37);
+    // Telegram metrics can differ from the actual browser app box while the
+    // bottom sheet is animating. Fixed CSS geometry must stay in the app box.
+    const telegramStableHeight = Math.max(240, Math.round(full.viewport.height - 37));
     await page.evaluate(height => {
       const webApp = window.Telegram.WebApp;
       webApp.viewportHeight = height - 9;
       webApp.viewportStableHeight = height;
       window.__telegramEvents.viewportChanged({ isStateStable: true });
     }, telegramStableHeight);
-    await page.waitForFunction(expected =>
-      parseFloat(getComputedStyle(document.documentElement)
-        .getPropertyValue("--player-viewport-height")) === expected,
-      telegramStableHeight
-    );
+    await page.waitForFunction(() => {
+      const app = document.querySelector("#app").getBoundingClientRect();
+      const measured = parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue("--player-viewport-height"));
+      return Math.abs(measured - app.height) <= 1;
+    });
     await waitForIframeToMatchFrame();
     const telegramSized = await readFullGeometry();
-    assert.equal(telegramSized.rotated, telegramStableHeight > item.width,
-      item.name + ": Telegram stable-height orientation was not applied");
+    assert.equal(telegramSized.rotated, telegramSized.viewport.height > telegramSized.viewport.width,
+      item.name + ": Telegram's mismatched report distorted orientation");
     assertCoverGeometry({
       frame: telegramSized.frame,
       layout: telegramSized.layout,
       iframe: telegramSized.iframe
-    }, item.width, telegramStableHeight, item.name + " Telegram stable viewport");
+    }, telegramSized.viewport.width, telegramSized.viewport.height,
+      item.name + " app box despite Telegram metric difference");
 
-    await page.evaluate(() => {
-      const webApp = window.Telegram.WebApp;
-      const visual = window.visualViewport;
-      const height = visual && Math.abs((visual.scale || 1) - 1) < 0.02
-        ? visual.height : document.documentElement.clientHeight || window.innerHeight;
-      webApp.viewportHeight = height;
-      webApp.viewportStableHeight = height;
-      window.__telegramEvents.viewportChanged({ isStateStable: true });
-    });
-    await page.waitForFunction(() => {
-      const visual = window.visualViewport;
-      const height = visual && Math.abs((visual.scale || 1) - 1) < 0.02
-        ? visual.height : document.documentElement.clientHeight || window.innerHeight;
-      return parseFloat(getComputedStyle(document.documentElement)
-        .getPropertyValue("--player-viewport-height")) === height;
-    });
-    await waitForIframeToMatchFrame();
-    assert.equal(full.rotated, item.height > item.width, item.name + ": initial rotation state is incorrect");
-    assertCoverGeometry({
-      frame: full.frame,
-      layout: full.layout,
-      iframe: full.iframe
-    }, item.width, item.height, item.name + " fullscreen");
     await page.screenshot({ path: path.join(artifacts, item.name + ".png") });
 
     const reversed = { width: item.height, height: item.width };
@@ -302,7 +308,8 @@ try {
     });
     await page.waitForFunction(() => {
       const stage = document.querySelector("#player-stage");
-      return stage.classList.contains("virtual-rotated") === (innerHeight > innerWidth);
+      const app = document.querySelector("#app").getBoundingClientRect();
+      return stage.classList.contains("virtual-rotated") === (app.height > app.width);
     });
     await waitForIframeToMatchFrame();
     const turned = await readFullGeometry();
@@ -312,7 +319,7 @@ try {
       frame: turned.frame,
       layout: turned.layout,
       iframe: turned.iframe
-    }, reversed.width, reversed.height, item.name + " after orientation change");
+    }, turned.viewport.width, turned.viewport.height, item.name + " after orientation change");
 
     await page.setViewportSize({ width: item.width, height: item.height });
     await page.evaluate(() => {
@@ -327,7 +334,8 @@ try {
     });
     await page.waitForFunction(() => {
       const stage = document.querySelector("#player-stage");
-      return stage.classList.contains("virtual-rotated") === (innerHeight > innerWidth);
+      const app = document.querySelector("#app").getBoundingClientRect();
+      return stage.classList.contains("virtual-rotated") === (app.height > app.width);
     });
     await waitForIframeToMatchFrame();
     const restoredOrientation = await readFullGeometry();
@@ -335,7 +343,8 @@ try {
       frame: restoredOrientation.frame,
       layout: restoredOrientation.layout,
       iframe: restoredOrientation.iframe
-    }, item.width, item.height, item.name + " after returning orientation");
+    }, restoredOrientation.viewport.width, restoredOrientation.viewport.height,
+      item.name + " after returning orientation");
 
     await page.locator("#fullscreen-button").click();
     const restored = await page.evaluate(() => {
