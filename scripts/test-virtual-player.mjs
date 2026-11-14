@@ -315,6 +315,23 @@ try {
 
     await page.screenshot({ path: path.join(artifacts, item.name + ".png") });
 
+    // Restore the simulated native app box before rotating the browser window.
+    await page.evaluate(() => {
+      const appElement = document.querySelector("#app");
+      appElement.style.height = "";
+      const appHeight = appElement.getBoundingClientRect().height;
+      const webApp = window.Telegram.WebApp;
+      webApp.viewportHeight = appHeight;
+      webApp.viewportStableHeight = appHeight;
+      window.__telegramEvents.viewportChanged({ isStateStable: true });
+    });
+    await page.waitForFunction(() => {
+      const app = document.querySelector("#app").getBoundingClientRect();
+      const measured = parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue("--player-viewport-height"));
+      return Math.abs(measured - app.height) <= 1;
+    });
+
     const reversed = { width: item.height, height: item.width };
     await page.setViewportSize(reversed);
     await page.evaluate(() => {
@@ -379,7 +396,7 @@ try {
       item.name + ": exiting fullscreen did not restore vertical centering");
 
     console.log("PASS " + item.name +
-      ": mini-player size, Telegram viewport event, physical control clicks, " +
+      ": automatic fullscreen, Telegram viewport event, physical control clicks, " +
       "virtual rotation, cover-fit, iframe resize and exit restoration");
     await context.close();
   }
