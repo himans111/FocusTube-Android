@@ -12,6 +12,8 @@
       background: #000;
       --player-viewport-width: 100vw;
       --player-viewport-height: 100vh;
+      --player-viewport-left: 0px;
+      --player-viewport-top: 0px;
       --player-frame-width: min(100vw, 177.7778dvh);
     }
     * { box-sizing: border-box; }
@@ -91,8 +93,10 @@
     #player-stage.virtual-fullscreen {
       position: fixed !important;
       inset: 0 !important;
-      left: 0 !important;
-      top: 0 !important;
+      left: var(--player-viewport-left) !important;
+      top: var(--player-viewport-top) !important;
+      right: auto !important;
+      bottom: auto !important;
       transform: none !important;
       width: var(--player-viewport-width) !important;
       height: var(--player-viewport-height) !important;
@@ -274,6 +278,7 @@
       let shieldPointer = null;
       let viewportWidth = Math.max(1, window.innerWidth || 1);
       let viewportHeight = Math.max(1, window.innerHeight || 1);
+      let telegramViewportIsStable = true;
       let resizeObserver = null;
 
       function decode(value) {
@@ -386,21 +391,62 @@
         }
       }
 
+      function readPositiveMetric(value) {
+        const number = Number(value);
+        return Number.isFinite(number) && number > 0 ? number : 0;
+      }
+
+      function handleTelegramViewportChanged(event) {
+        if (event && typeof event.isStateStable === "boolean") {
+          telegramViewportIsStable = event.isStateStable;
+        }
+        updateViewportMetrics();
+      }
+
       function updateViewportMetrics() {
         const vv = window.visualViewport;
-        const telegramHeight = telegram && Number(telegram.viewportHeight) > 0
-          ? Number(telegram.viewportHeight) : 0;
-        const width = Math.max(1, Math.round(vv && vv.width ? vv.width :
-          document.documentElement.clientWidth || window.innerWidth || 1));
-        const height = Math.max(1, Math.round(vv && vv.height ? vv.height :
-          telegramHeight || document.documentElement.clientHeight || window.innerHeight || 1));
+        const doc = document.documentElement;
+        const visualScale = vv ? readPositiveMetric(vv.scale) || 1 : 1;
+        // Ignore a zoomed visual viewport: it is smaller than the layout box.
+        const visualViewportUsable = Boolean(vv &&
+          Math.abs(visualScale - 1) < 0.02 &&
+          readPositiveMetric(vv.width) &&
+          readPositiveMetric(vv.height));
+
+        const telegramStableHeight = telegram
+          ? readPositiveMetric(telegram.viewportStableHeight) : 0;
+        const telegramCurrentHeight = telegram
+          ? readPositiveMetric(telegram.viewportHeight) : 0;
+        // Use Telegram's stable visible height after expansion; during a
+        // bottom-sheet animation, follow its current viewportHeight instead.
+        const telegramHeight = telegramViewportIsStable
+          ? telegramStableHeight || telegramCurrentHeight
+          : telegramCurrentHeight || telegramStableHeight;
+
+        const visualWidth = visualViewportUsable ? readPositiveMetric(vv.width) : 0;
+        const visualHeight = visualViewportUsable ? readPositiveMetric(vv.height) : 0;
+        const width = Math.max(1, Math.round(
+          visualWidth || readPositiveMetric(doc.clientWidth) ||
+          readPositiveMetric(window.innerWidth) || readPositiveMetric(app.clientWidth) || 1
+        ));
+        const height = Math.max(1, Math.round(
+          telegramHeight || visualHeight || readPositiveMetric(doc.clientHeight) ||
+          readPositiveMetric(window.innerHeight) || readPositiveMetric(app.clientHeight) || 1
+        ));
+        const left = visualViewportUsable
+          ? Math.max(0, Math.round(Number(vv.offsetLeft) || 0)) : 0;
+        const top = visualViewportUsable
+          ? Math.max(0, Math.round(Number(vv.offsetTop) || 0)) : 0;
+
         viewportWidth = width;
         viewportHeight = height;
         rootStyle.setProperty("--player-viewport-width", width + "px");
         rootStyle.setProperty("--player-viewport-height", height + "px");
-        // Cover both viewport dimensions after the CSS rotation. If the
-        // viewport ratio differs from 16:9, the excess edge is clipped by the
-        // fullscreen stage instead of leaving unused black margins.
+        rootStyle.setProperty("--player-viewport-left", left + "px");
+        rootStyle.setProperty("--player-viewport-top", top + "px");
+
+        // Size the 16:9 source frame from the visible viewport. CSS rotation
+        // turns portrait screens into landscape video without device rotation.
         const longestSide = Math.max(width, height);
         const shortestSide = Math.min(width, height);
         const landscapeWidth = Math.max(longestSide, shortestSide * (16 / 9));
@@ -513,7 +559,7 @@
         try {
           telegram.ready();
           if (typeof telegram.onEvent === "function") {
-            try { telegram.onEvent("viewportChanged", updateViewportMetrics); } catch (_) {}
+            try { telegram.onEvent("viewportChanged", handleTelegramViewportChanged); } catch (_) {}
           }
           telegram.expand();
           if (typeof telegram.setHeaderColor === "function") telegram.setHeaderColor("#000000");
@@ -655,8 +701,8 @@
         if (event.cancelable) event.preventDefault();
         const width = stage.getBoundingClientRect().width;
         const height = stage.getBoundingClientRect().height;
-        const maxLeft = Math.max(0, window.innerWidth - width);
-        const maxTop = Math.max(0, window.innerHeight - height);
+        const maxLeft = Math.max(0, viewportWidth - width);
+        const maxTop = Math.max(0, viewportHeight - height);
         playerLeft = Math.min(maxLeft, Math.max(0, event.clientX + dragState.offsetX));
         playerTop = Math.min(maxTop, Math.max(0, event.clientY + dragState.offsetY));
         stage.style.left = playerLeft + "px";
@@ -681,8 +727,8 @@
       });
       window.addEventListener("resize", () => {
         if (!fullscreen && stage.classList.contains("manually-positioned")) {
-          const maxLeft = Math.max(0, window.innerWidth - stage.getBoundingClientRect().width);
-          const maxTop = Math.max(0, window.innerHeight - stage.getBoundingClientRect().height);
+          const maxLeft = Math.max(0, viewportWidth - stage.getBoundingClientRect().width);
+          const maxTop = Math.max(0, viewportHeight - stage.getBoundingClientRect().height);
           playerLeft = Math.min(playerLeft, maxLeft);
           playerTop = Math.min(playerTop, maxTop);
           stage.style.left = playerLeft + "px";
@@ -690,7 +736,15 @@
         }
         updateViewportMetrics();
       });
-      window.addEventListener("orientationchange", updateViewportMetrics);
+      function refreshAfterOrientationChange() {
+        updateViewportMetrics();
+        if (typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(updateViewportMetrics);
+          });
+        }
+      }
+      window.addEventListener("orientationchange", refreshAfterOrientationChange);
       if (window.visualViewport) {
         window.visualViewport.addEventListener("resize", updateViewportMetrics, { passive: true });
         window.visualViewport.addEventListener("scroll", updateViewportMetrics, { passive: true });

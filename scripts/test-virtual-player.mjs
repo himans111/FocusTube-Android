@@ -56,7 +56,9 @@ try {
     { name: "landscape-phone-844x390", width: 844, height: 390, mobile: true },
     { name: "landscape-tablet-1024x768", width: 1024, height: 768, mobile: true },
     { name: "laptop-1366x768", width: 1366, height: 768, mobile: false },
-    { name: "desktop-1920x1080", width: 1920, height: 1080, mobile: false }
+    { name: "desktop-1920x1080", width: 1920, height: 1080, mobile: false },
+    { name: "macbook-1512x982", width: 1512, height: 982, mobile: false },
+    { name: "ultrawide-2560x1080", width: 2560, height: 1080, mobile: false }
   ];
 
   for (const item of viewports) {
@@ -79,6 +81,7 @@ try {
         WebApp: {
           initDataUnsafe: { start_param: "dQw4w9WgXcQ" },
           viewportHeight: window.innerHeight,
+          viewportStableHeight: window.innerHeight,
           ready() { window.__telegramReady = true; },
           expand() { window.__telegramExpanded = true; },
           setHeaderColor() {},
@@ -222,6 +225,42 @@ try {
     await waitForIframeToMatchFrame();
     const full = await readFullGeometry();
     assert.equal(full.active, true, item.name + ": virtual fullscreen did not activate");
+
+    // Telegram can expose a stable visible height different from the browser
+    // visualViewport. Fullscreen sizing must honor the Telegram measurement.
+    const telegramStableHeight = Math.max(240, item.height - 37);
+    await page.evaluate(height => {
+      const webApp = window.Telegram.WebApp;
+      webApp.viewportHeight = height - 9;
+      webApp.viewportStableHeight = height;
+      window.__telegramEvents.viewportChanged({ isStateStable: true });
+    }, telegramStableHeight);
+    await page.waitForFunction(expected =>
+      parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue("--player-viewport-height")) === expected,
+      telegramStableHeight
+    );
+    await waitForIframeToMatchFrame();
+    const telegramSized = await readFullGeometry();
+    assert.equal(telegramSized.rotated, telegramStableHeight > item.width,
+      item.name + ": Telegram stable-height orientation was not applied");
+    assertCoverGeometry({
+      frame: telegramSized.frame,
+      layout: telegramSized.layout,
+      iframe: telegramSized.iframe
+    }, item.width, telegramStableHeight, item.name + " Telegram stable viewport");
+
+    await page.evaluate(() => {
+      const webApp = window.Telegram.WebApp;
+      webApp.viewportHeight = window.innerHeight;
+      webApp.viewportStableHeight = window.innerHeight;
+      window.__telegramEvents.viewportChanged({ isStateStable: true });
+    });
+    await page.waitForFunction(() =>
+      parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue("--player-viewport-height")) === window.innerHeight
+    );
+    await waitForIframeToMatchFrame();
     assert.equal(full.rotated, item.height > item.width, item.name + ": initial rotation state is incorrect");
     assertCoverGeometry({
       frame: full.frame,
@@ -233,8 +272,11 @@ try {
     const reversed = { width: item.height, height: item.width };
     await page.setViewportSize(reversed);
     await page.evaluate(() => {
+      const app = window.Telegram.WebApp;
+      app.viewportHeight = window.innerHeight;
+      app.viewportStableHeight = window.innerHeight;
       const notify = window.__telegramEvents.viewportChanged;
-      if (typeof notify === "function") notify({ is_state_stable: true });
+      if (typeof notify === "function") notify({ isStateStable: true });
     });
     await page.waitForFunction(() => {
       const stage = document.querySelector("#player-stage");
@@ -252,8 +294,11 @@ try {
 
     await page.setViewportSize({ width: item.width, height: item.height });
     await page.evaluate(() => {
+      const app = window.Telegram.WebApp;
+      app.viewportHeight = window.innerHeight;
+      app.viewportStableHeight = window.innerHeight;
       const notify = window.__telegramEvents.viewportChanged;
-      if (typeof notify === "function") notify({ is_state_stable: true });
+      if (typeof notify === "function") notify({ isStateStable: true });
     });
     await page.waitForFunction(() => {
       const stage = document.querySelector("#player-stage");

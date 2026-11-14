@@ -57,7 +57,12 @@ const required = [
   "--player-frame-width",
   "window.visualViewport",
   "telegram.viewportHeight",
-  'telegram.onEvent("viewportChanged", updateViewportMetrics)',
+  "telegram.viewportStableHeight",
+  "telegramViewportIsStable",
+  "event.isStateStable",
+  'telegram.onEvent("viewportChanged", handleTelegramViewportChanged)',
+  "--player-viewport-left",
+  "--player-viewport-top",
   'id="tap-shield"',
   'tapShield.addEventListener("pointerup"',
   "setControlsVisible(false, false)",
@@ -110,7 +115,8 @@ try {
 
 for (const [vw, vh] of [
   [360, 800], [390, 844], [768, 1024], [844, 390],
-  [1024, 768], [1366, 768], [1920, 1080]
+  [1024, 768], [1366, 768], [1920, 1080],
+  [1512, 982], [2560, 1080]
 ]) {
   const portrait = vh > vw;
   const longestSide = Math.max(vw, vh);
