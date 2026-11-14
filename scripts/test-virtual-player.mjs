@@ -54,18 +54,21 @@ try {
           iframe.id = "mock-youtube-iframe";
           iframe.title = "Mock YouTube player";
           host.replaceWith(iframe);
-          this.getIframe = () => iframe;
-          this.setSize = (width, height) => {
-            iframe.style.width = width + "px";
-            iframe.style.height = height + "px";
-            iframe.width = String(width);
-            iframe.height = String(height);
+          const target = {
+            getIframe: () => iframe,
+            setSize(width, height) {
+              iframe.style.width = width + "px";
+              iframe.style.height = height + "px";
+              iframe.width = String(width);
+              iframe.height = String(height);
+            },
+            unMute() {},
+            setVolume() {},
+            playVideo() {}
           };
-          this.unMute = () => {};
-          this.setVolume = () => {};
-          this.playVideo = () => {};
-          window.__mockPlayer = this;
-          queueMicrotask(() => config.events.onReady({ target: this }));
+          window.__mockPlayer = target;
+          queueMicrotask(() => config.events.onReady({ target }));
+          return target;
         }
       };
       window.onYouTubeIframeAPIReady();
@@ -112,7 +115,9 @@ try {
         stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
         frame: { x: frameRect.x, y: frameRect.y, width: frameRect.width, height: frameRect.height,
                  layoutWidth: frame.clientWidth, layoutHeight: frame.clientHeight },
-        iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) }
+        iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) },
+        frameClient: { width: frame.clientWidth, height: frame.clientHeight },
+        playerMethods: { hasSetSize: typeof window.__mockPlayer.setSize === "function" }
       };
     });
     assert.equal(full.active, true, item.name + ": virtual fullscreen did not activate");
