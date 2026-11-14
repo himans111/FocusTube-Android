@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
     paths:
+      - "p/**"
+      - "p2/**"
+      - "p3/**"
+      - "p4/**"
       - "tube-player/**"
       - "scripts/validate-telegram-player.mjs"
       - "scripts/test-virtual-player.mjs"
@@ -11,6 +15,10 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "p/**"
+      - "p2/**"
+      - "p3/**"
+      - "p4/**"
       - "tube-player/**"
       - "scripts/validate-telegram-player.mjs"
       - ".github/workflows/validate-telegram-player.yml"

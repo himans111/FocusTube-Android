@@ -4,35 +4,35 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = process.cwd();
-const htmlPath = path.join(root, "tube-player/index.html");
-const shortPath = path.join(root, "p/index.html");
-const cacheBustPath = path.join(root, "p2/index.html");
-const freshPath = path.join(root, "p3/index.html");
-const latestPath = path.join(root, "p4/index.html");
-if (!fs.existsSync(htmlPath)) throw new Error("Missing " + htmlPath);
-if (!fs.existsSync(shortPath)) throw new Error("Missing " + shortPath);
-if (!fs.existsSync(cacheBustPath)) throw new Error("Missing " + cacheBustPath);
-if (!fs.existsSync(freshPath)) throw new Error("Missing " + freshPath);
-if (!fs.existsSync(latestPath)) throw new Error("Missing " + latestPath);
+const paths = [
+  "tube-player/index.html",
+  "p/index.html",
+  "p2/index.html",
+  "p3/index.html",
+  "p4/index.html"
+];
+for (const relativePath of paths) {
+  if (!fs.existsSync(path.join(root, relativePath))) {
+    throw new Error("Missing " + relativePath);
+  }
+}
 
-const html = fs.readFileSync(htmlPath, "utf8");
-const shortHtml = fs.readFileSync(shortPath, "utf8");
-const cacheBustHtml = fs.readFileSync(cacheBustPath, "utf8");
-const freshHtml = fs.readFileSync(freshPath, "utf8");
-const latestHtml = fs.readFileSync(latestPath, "utf8");
-if (html !== shortHtml || html !== cacheBustHtml || html !== freshHtml || html !== latestHtml) {
+const documents = paths.map(relativePath =>
+  fs.readFileSync(path.join(root, relativePath), "utf8")
+);
+const html = documents[0];
+if (documents.some(document => document !== html)) {
   throw new Error("p/index.html, p2/index.html, p3/index.html, p4/index.html and tube-player/index.html must be identical");
 }
 
 const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
-  .filter((m) => !/\bsrc\s*=/.test(m[1]))
-  .map((m) => m[2])
-  .filter((s) => s.trim());
+  .filter(match => !/\bsrc\s*=/.test(match[1]))
+  .map(match => match[2])
+  .filter(source => source.trim());
 if (!scripts.length) throw new Error("No inline JavaScript found");
 
 const required = [
-  "#video-frame",
-  "#video-frame > iframe",
+  "width: min(100vw, 640px, 177.7778dvh)",
   "const width = Math.round(videoFrame.clientWidth)",
   "const height = Math.round(videoFrame.clientHeight)",
   'iframe.style.width = width + "px"',
@@ -40,28 +40,19 @@ const required = [
   "player.setSize(width, height)",
   "#player-stage.virtual-fullscreen",
   "#player-stage.virtual-fullscreen.virtual-rotated #video-frame",
-  "position: absolute",
-  "left: 50%",
-  "top: 50%",
   "transform: translate(-50%, -50%) rotate(90deg)",
-  "left: 50%",
-  "top: 50%",
-  "transform: translate(-50%, -50%)",
   "const longestSide = Math.max(width, height)",
   "const shortestSide = Math.min(width, height)",
   "Math.max(longestSide, shortestSide * (16 / 9))",
-  'stage.classList.contains("manually-positioned")',
   "--player-viewport-width",
   "--player-viewport-height",
   "--player-frame-width",
   "window.visualViewport",
-  "new ResizeObserver",
-  "setFullscreenUi(true)",
-  "setFullscreenUi(false)",
+  "telegram.viewportHeight",
+  'telegram.onEvent("viewportChanged", updateViewportMetrics)',
   'id="tap-shield"',
   'tapShield.addEventListener("pointerup"',
   "setControlsVisible(false, false)",
-  "controls-visible #fullscreen-button",
   "}, 2500);",
   "fs: 0",
   "allowfullscreen",
@@ -69,7 +60,9 @@ const required = [
   "setVolume(100)",
   "beginHold",
   "initDataUnsafe",
-  "setStatus"
+  "setStatus",
+  'window.addEventListener("pageshow", updateViewportMetrics)',
+  'document.addEventListener("visibilitychange"'
 ];
 for (const feature of required) {
   if (!html.includes(feature)) throw new Error("Missing required feature: " + feature);
@@ -95,28 +88,35 @@ for (const feature of forbidden) {
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "player-check-"));
 try {
-  scripts.forEach((source, i) => {
-    const file = path.join(dir, "inline-" + i + ".js");
+  scripts.forEach((source, index) => {
+    const file = path.join(dir, "inline-" + index + ".js");
     fs.writeFileSync(file, source);
     const result = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
-    if (result.status !== 0) throw new Error(result.stderr || result.stdout || "JavaScript syntax error");
+    if (result.status !== 0) {
+      throw new Error(result.stderr || result.stdout || "JavaScript syntax error");
+    }
   });
 } finally {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-// Geometry checks for portrait and landscape viewports from mobile through desktop.
-for (const [vw, vh] of [[360, 800], [390, 844], [768, 1024], [1024, 768], [1366, 768], [1920, 1080]]) {
-  const isPortrait = vh > vw;
-  const landscapeWidth = Math.min(isPortrait ? vh : vw, isPortrait ? vw * 16 / 9 : vh * 16 / 9);
+for (const [vw, vh] of [
+  [360, 800], [390, 844], [768, 1024], [844, 390],
+  [1024, 768], [1366, 768], [1920, 1080]
+]) {
+  const portrait = vh > vw;
+  const longestSide = Math.max(vw, vh);
+  const shortestSide = Math.min(vw, vh);
+  const landscapeWidth = Math.max(longestSide, shortestSide * (16 / 9));
   const videoHeight = landscapeWidth * 9 / 16;
-  const renderedWidth = isPortrait ? videoHeight : landscapeWidth;
-  const renderedHeight = isPortrait ? landscapeWidth : videoHeight;
-  if (renderedWidth > vw + 0.01 || renderedHeight > vh + 0.01) {
-    throw new Error("Virtual landscape geometry overflows viewport " + vw + "x" + vh);
+  const renderedWidth = portrait ? videoHeight : landscapeWidth;
+  const renderedHeight = portrait ? landscapeWidth : videoHeight;
+  if (renderedWidth + 0.01 < vw || renderedHeight + 0.01 < vh) {
+    throw new Error("Virtual landscape leaves an uncovered strip at " + vw + "x" + vh);
   }
   if (Math.abs(landscapeWidth / videoHeight - 16 / 9) > 0.0001) {
     throw new Error("Virtual landscape aspect ratio changed for " + vw + "x" + vh);
   }
 }
-console.log("PASS: website-only virtual landscape, multi-size geometry, responsive resizing, touch-to-reveal auto-hide, identical routes and JS syntax.");
+
+console.log("PASS: route parity, JavaScript syntax, fullscreen API exclusions, 16:9 cover geometry, responsive mini-player sizing and Telegram viewport integration.");

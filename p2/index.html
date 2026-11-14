@@ -44,7 +44,7 @@
       left: 50%;
       top: 50%;
       transform: translate(-50%, -50%);
-      width: min(100vw, 177.7778dvh);
+      width: min(100vw, 640px, 177.7778dvh);
       height: auto;
       max-height: none;
       min-height: 1px;
@@ -386,10 +386,12 @@
 
       function updateViewportMetrics() {
         const vv = window.visualViewport;
+        const telegramHeight = telegram && Number(telegram.viewportHeight) > 0
+          ? Number(telegram.viewportHeight) : 0;
         const width = Math.max(1, Math.round(vv && vv.width ? vv.width :
           document.documentElement.clientWidth || window.innerWidth || 1));
         const height = Math.max(1, Math.round(vv && vv.height ? vv.height :
-          document.documentElement.clientHeight || window.innerHeight || 1));
+          telegramHeight || document.documentElement.clientHeight || window.innerHeight || 1));
         viewportWidth = width;
         viewportHeight = height;
         rootStyle.setProperty("--player-viewport-width", width + "px");
@@ -508,6 +510,9 @@
       if (telegram) {
         try {
           telegram.ready();
+          if (typeof telegram.onEvent === "function") {
+            try { telegram.onEvent("viewportChanged", updateViewportMetrics); } catch (_) {}
+          }
           telegram.expand();
           if (typeof telegram.setHeaderColor === "function") telegram.setHeaderColor("#000000");
           if (typeof telegram.setBackgroundColor === "function") telegram.setBackgroundColor("#000000");
@@ -668,6 +673,10 @@
       window.addEventListener("pointermove", moveHold, { passive: false });
       window.addEventListener("pointerup", endHold);
       window.addEventListener("pointercancel", endHold);
+      window.addEventListener("pageshow", updateViewportMetrics);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) updateViewportMetrics();
+      });
       window.addEventListener("resize", () => {
         if (!fullscreen && stage.classList.contains("manually-positioned")) {
           const maxLeft = Math.max(0, window.innerWidth - stage.getBoundingClientRect().width);
