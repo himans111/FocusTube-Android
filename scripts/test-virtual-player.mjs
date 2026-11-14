@@ -56,12 +56,7 @@ try {
           host.replaceWith(iframe);
           const target = {
             getIframe: () => iframe,
-            setSize(width, height) {
-              iframe.style.width = width + "px";
-              iframe.style.height = height + "px";
-              iframe.width = String(width);
-              iframe.height = String(height);
-            },
+            setSize() {},
             unMute() {},
             setVolume() {},
             playVideo() {}
@@ -115,7 +110,8 @@ try {
         stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
         frame: { x: frameRect.x, y: frameRect.y, width: frameRect.width, height: frameRect.height,
                  layoutWidth: frame.clientWidth, layoutHeight: frame.clientHeight },
-        iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) },
+        iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height),
+                  attrWidth: Number(iframe.getAttribute("width")), attrHeight: Number(iframe.getAttribute("height")) },
         frameClient: { width: frame.clientWidth, height: frame.clientHeight },
         playerMethods: { hasSetSize: typeof window.__mockPlayer.setSize === "function" }
       };

@@ -352,12 +352,28 @@
       }
 
       function resizePlayerToFrame() {
-        if (!player || typeof player.setSize !== "function" || !videoFrame) return;
-        // clientWidth/clientHeight are layout dimensions before CSS rotation.
-        const width = videoFrame.clientWidth;
-        const height = videoFrame.clientHeight;
+        if (!videoFrame) return;
+        // Use the layout box before rotate(90deg). The YouTube iframe itself is
+        // cross-origin, but its outer element remains ours and can be resized.
+        const width = Math.round(videoFrame.clientWidth);
+        const height = Math.round(videoFrame.clientHeight);
         if (width < 200 || height < 200) return;
-        player.setSize(Math.round(width), Math.round(height));
+
+        const iframe = videoFrame.querySelector(":scope > iframe");
+        if (iframe) {
+          iframe.style.width = width + "px";
+          iframe.style.height = height + "px";
+          iframe.style.maxWidth = "none";
+          iframe.style.maxHeight = "none";
+          iframe.width = String(width);
+          iframe.height = String(height);
+        }
+
+        // Keep the YouTube API informed as an additional hint. The direct outer
+        // iframe sizing above remains effective even if setSize throws or races.
+        if (player && typeof player.setSize === "function") {
+          try { player.setSize(width, height); } catch (_) {}
+        }
       }
 
       function schedulePlayerResize() {
