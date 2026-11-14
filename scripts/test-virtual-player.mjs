@@ -190,6 +190,16 @@ try {
       document.querySelector("#player-stage").classList.contains("virtual-fullscreen")
     );
 
+    const waitForIframeToMatchFrame = () => page.waitForFunction(() => {
+      const frame = document.querySelector("#video-frame");
+      const iframe = document.querySelector("#mock-youtube-iframe");
+      if (!frame || !iframe) return false;
+      const width = parseFloat(iframe.style.width);
+      const height = parseFloat(iframe.style.height);
+      return Math.abs(width - frame.clientWidth) <= 1 &&
+        Math.abs(height - frame.clientHeight) <= 1;
+    }, null, { timeout: 5000 });
+
     const readFullGeometry = () => page.evaluate(() => {
       const stage = document.querySelector("#player-stage");
       const frame = document.querySelector("#video-frame");
@@ -209,6 +219,7 @@ try {
       };
     });
 
+    await waitForIframeToMatchFrame();
     const full = await readFullGeometry();
     assert.equal(full.active, true, item.name + ": virtual fullscreen did not activate");
     assert.equal(full.rotated, item.height > item.width, item.name + ": initial rotation state is incorrect");
@@ -229,6 +240,7 @@ try {
       const stage = document.querySelector("#player-stage");
       return stage.classList.contains("virtual-rotated") === (innerHeight > innerWidth);
     });
+    await waitForIframeToMatchFrame();
     const turned = await readFullGeometry();
     assert.equal(turned.rotated, reversed.height > reversed.width,
       item.name + ": rotation state did not update after viewport change");
@@ -247,6 +259,7 @@ try {
       const stage = document.querySelector("#player-stage");
       return stage.classList.contains("virtual-rotated") === (innerHeight > innerWidth);
     });
+    await waitForIframeToMatchFrame();
     const restoredOrientation = await readFullGeometry();
     assertCoverGeometry({
       frame: restoredOrientation.frame,
