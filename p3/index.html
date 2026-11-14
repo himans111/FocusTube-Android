@@ -41,8 +41,9 @@
     }
     #player-stage {
       position: fixed;
-      left: 0;
-      top: 0;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
       width: min(100vw, 177.7778dvh);
       height: auto;
       max-height: none;
@@ -93,6 +94,7 @@
       inset: 0 !important;
       left: 0 !important;
       top: 0 !important;
+      transform: none !important;
       width: var(--player-viewport-width) !important;
       height: var(--player-viewport-height) !important;
       max-height: none !important;
@@ -374,10 +376,13 @@
         viewportHeight = height;
         rootStyle.setProperty("--player-viewport-width", width + "px");
         rootStyle.setProperty("--player-viewport-height", height + "px");
-        const landscapeWidth = height > width
-          ? Math.min(height, width * (16 / 9))
-          : Math.min(width, height * (16 / 9));
-        rootStyle.setProperty("--player-frame-width", Math.max(1, landscapeWidth) + "px");
+        // Cover both viewport dimensions after the CSS rotation. If the
+        // viewport ratio differs from 16:9, the excess edge is clipped by the
+        // fullscreen stage instead of leaving unused black margins.
+        const longestSide = Math.max(width, height);
+        const shortestSide = Math.min(width, height);
+        const landscapeWidth = Math.max(longestSide, shortestSide * (16 / 9));
+        rootStyle.setProperty("--player-frame-width", Math.max(200, landscapeWidth) + "px");
         stage.classList.toggle("virtual-rotated", Boolean(fullscreen && height > width));
         schedulePlayerResize();
       }
@@ -389,8 +394,16 @@
         fullscreenButton.title = fullscreen ? "Exit virtual landscape" : "Virtual landscape";
         playerLeft = 0;
         playerTop = 0;
-        stage.style.left = "0px";
-        stage.style.top = "0px";
+        stage.classList.remove("manually-positioned");
+        if (fullscreen) {
+          stage.style.left = "0px";
+          stage.style.top = "0px";
+          stage.style.transform = "none";
+        } else {
+          stage.style.left = "50%";
+          stage.style.top = "50%";
+          stage.style.transform = "translate(-50%, -50%)";
+        }
         updateViewportMetrics();
       }
 
@@ -590,6 +603,13 @@
         dragTimer = window.setTimeout(() => {
           if (!dragState) return;
           dragState.active = true;
+          const currentRect = stage.getBoundingClientRect();
+          stage.classList.add("manually-positioned");
+          stage.style.transform = "none";
+          stage.style.left = currentRect.left + "px";
+          stage.style.top = currentRect.top + "px";
+          playerLeft = currentRect.left;
+          playerTop = currentRect.top;
           stage.classList.add("is-dragging");
           if (source && source.setPointerCapture && event.pointerId !== undefined) {
             try { source.setPointerCapture(event.pointerId); } catch (_) {}
@@ -631,7 +651,7 @@
       window.addEventListener("pointerup", endHold);
       window.addEventListener("pointercancel", endHold);
       window.addEventListener("resize", () => {
-        if (!fullscreen) {
+        if (!fullscreen && stage.classList.contains("manually-positioned")) {
           const maxLeft = Math.max(0, window.innerWidth - stage.getBoundingClientRect().width);
           const maxTop = Math.max(0, window.innerHeight - stage.getBoundingClientRect().height);
           playerLeft = Math.min(playerLeft, maxLeft);

@@ -6,6 +6,7 @@ on:
     paths:
       - "tube-player/**"
       - "scripts/validate-telegram-player.mjs"
+      - "scripts/test-virtual-player.mjs"
       - ".github/workflows/validate-telegram-player.yml"
   pull_request:
     branches: [main]
@@ -26,5 +27,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate player
+      - name: Validate player source
         run: node scripts/validate-telegram-player.mjs
+      - name: Install Playwright
+        run: npm install --no-save playwright
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run responsive browser tests
+        run: node scripts/test-virtual-player.mjs
+      - name: Upload browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: virtual-player-browser-screenshots
+          path: browser-test-artifacts/
+          if-no-files-found: ignore
