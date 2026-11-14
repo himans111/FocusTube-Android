@@ -88,12 +88,24 @@ try {
       };
     });
 
-    await page.route("https://**", route => route.fulfill({
-      status: 200,
-      contentType: "application/javascript",
-      body: ""
+    await page.route("https://telegram.org/js/telegram-web-app.js", route => route.fulfill({
+      status: 200, contentType: "application/javascript", body: ""
+    }));
+    await page.route("https://www.youtube.com/iframe_api", route => route.fulfill({
+      status: 200, contentType: "application/javascript", body: ""
     }));
     await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+
+    const preflight = await page.evaluate(() => ({
+      telegramStartParam: window.Telegram && window.Telegram.WebApp &&
+        window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.start_param,
+      callback: typeof window.onYouTubeIframeAPIReady,
+      ready: window.__telegramReady
+    }));
+    assert.equal(preflight.telegramStartParam, "dQw4w9WgXcQ",
+      item.name + ": Telegram test fixture was overwritten before the page booted");
+    assert.equal(preflight.callback, "function",
+      item.name + ": YouTube IFrame API callback was not registered");
 
     await page.evaluate(() => {
       window.YT = {
