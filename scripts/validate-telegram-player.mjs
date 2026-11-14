@@ -31,6 +31,14 @@ const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
   .filter(source => source.trim());
 if (!scripts.length) throw new Error("No inline JavaScript found");
 
+const controlPlacement = `      </div>
+      <!-- Controls belong to the fixed stage, not the rotated video frame.
+           This keeps the fullscreen button reachable on portrait phones. -->
+      <div id="tap-shield"`;
+if (!html.includes(controlPlacement)) {
+  throw new Error("Fullscreen/touch controls must be siblings of the rotated video frame");
+}
+
 const required = [
   "width: min(100vw, 640px, 177.7778dvh)",
   "const width = Math.round(videoFrame.clientWidth)",

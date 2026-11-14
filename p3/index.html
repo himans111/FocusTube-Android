@@ -228,16 +228,18 @@
     <section id="player-stage" aria-label="YouTube video">
       <div id="video-frame">
         <div id="player"></div>
-        <div id="tap-shield" aria-label="Tap to show player controls"></div>
-        <div id="drag-strip" aria-label="Hold and drag video"></div>
-        <button id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Fullscreen" aria-hidden="true" tabindex="-1">
-          <svg id="fullscreen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>
-            <path d="M8 8 3 3M16 8l5-5M8 16l-5 5M16 16l5 5"/>
-          </svg>
-        </button>
-        <button id="sound-prompt" type="button" hidden>Tap to play with sound</button>
       </div>
+      <!-- Controls belong to the fixed stage, not the rotated video frame.
+           This keeps the fullscreen button reachable on portrait phones. -->
+      <div id="tap-shield" aria-label="Tap to show player controls"></div>
+      <div id="drag-strip" aria-label="Hold and drag video"></div>
+      <button id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Fullscreen" aria-hidden="true" tabindex="-1">
+        <svg id="fullscreen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>
+          <path d="M8 8 3 3M16 8l5-5M8 16l-5 5M16 16l5 5"/>
+        </svg>
+      </button>
+      <button id="sound-prompt" type="button" hidden>Tap to play with sound</button>
     </section>
     <div id="status" role="status" aria-live="polite"></div>
   </main>
