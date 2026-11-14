@@ -243,7 +243,9 @@ try {
     await page.waitForFunction(() =>
       !document.querySelector("#player-stage").classList.contains("virtual-fullscreen")
     );
-    await page.locator("#tap-shield").click({ position: { x: 20, y: 20 } });
+    // Exiting virtual fullscreen intentionally leaves the control visible,
+    // so the same fullscreen button can immediately re-enter without tapping
+    // the now-small mini-player's touch shield.
     await page.locator("#fullscreen-button").click();
     await page.waitForFunction(() =>
       document.querySelector("#player-stage").classList.contains("virtual-fullscreen")
