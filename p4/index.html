@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark">
+  <title>Video Player</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      background: #000;
+      --player-viewport-width: 100vw;
+      --player-viewport-height: 100vh;
+      --player-frame-width: min(100vw, 177.7778dvh);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #app {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: #000;
+      touch-action: pan-y;
+    }
+    #workspace {
+      position: absolute;
+      inset: 0;
+      background: #000;
+      touch-action: pan-y;
+    }
+    #player-stage {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: min(100vw, 177.7778dvh);
+      height: auto;
+      max-height: none;
+      min-height: 1px;
+      aspect-ratio: 16 / 9;
+      background: #000;
+      overflow: visible;
+      z-index: 2;
+      transform: none;
+      will-change: left, top, width, height;
+    }
+    #video-frame {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      background: #000;
+    }
+    /* YT.Player replaces #player with a direct iframe child. Style both
+       the initial mount node and the iframe that the API inserts. */
+    #player,
+    #video-frame > iframe {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #000;
+    }
+    /* While the custom control is hidden, this transparent layer catches one
+       tap and reveals it. When controls are visible it becomes click-through,
+       so YouTube playback/seek controls remain usable. */
+    #tap-shield {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      background: transparent;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    #player-stage.controls-visible #tap-shield { pointer-events: none; }
+    /* Website-owned virtual fullscreen: no host or browser fullscreen API.
+       It fills the webpage viewport and rotates the 16:9 player in portrait. */
+    #player-stage.virtual-fullscreen {
+      position: fixed !important;
+      inset: 0 !important;
+      left: 0 !important;
+      top: 0 !important;
+      width: var(--player-viewport-width) !important;
+      height: var(--player-viewport-height) !important;
+      max-height: none !important;
+      min-height: 0 !important;
+      aspect-ratio: auto !important;
+      z-index: 2147483000;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      box-sizing: border-box;
+      transform: none;
+      overflow: hidden;
+      background: #000;
+      overscroll-behavior: contain;
+      touch-action: manipulation;
+    }
+    #player-stage.virtual-fullscreen #video-frame {
+      width: var(--player-frame-width);
+      height: auto;
+      aspect-ratio: 16 / 9;
+      transform: none;
+      transform-origin: center center;
+    }
+    #player-stage.virtual-fullscreen.virtual-rotated #video-frame {
+      width: var(--player-frame-width);
+      transform: rotate(90deg);
+      transform-origin: center center;
+    }
+    #player-stage.virtual-fullscreen #drag-strip { display: none; }
+    #drag-strip {
+      position: absolute;
+      z-index: 4;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 18px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 5px;
+      touch-action: none;
+      cursor: grab;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .16s ease;
+    }
+    #player-stage.controls-visible #drag-strip {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #drag-strip::after {
+      content: "";
+      display: block;
+      width: 34px;
+      height: 3px;
+      border-radius: 99px;
+      background: rgba(255,255,255,.22);
+    }
+    #player-stage.is-dragging { opacity: .94; }
+    #player-stage.is-dragging #drag-strip { cursor: grabbing; }
+    /* Single fullscreen control for the complete video box. */
+    #fullscreen-button {
+      position: absolute;
+      z-index: 5;
+      right: 10px;
+      bottom: max(10px, env(safe-area-inset-bottom));
+      top: auto;
+      transform: none;
+      width: 48px;
+      height: 48px;
+      padding: 11px;
+      border: 0;
+      border-radius: 50%;
+      color: #fff;
+      background: rgba(0,0,0,.34);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .16s ease, visibility .16s ease;
+      touch-action: manipulation;
+    }
+    #player-stage.controls-visible #fullscreen-button {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+    #fullscreen-button:active { background: rgba(0,0,0,.62); }
+    #fullscreen-button svg { width: 24px; height: 24px; display: block; }
+    #sound-prompt {
+      position: absolute;
+      z-index: 6;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 999px;
+      padding: 11px 16px;
+      color: #fff;
+      background: rgba(0,0,0,.82);
+      font: 600 14px/1.2 system-ui, sans-serif;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    #sound-prompt[hidden] { display: none; }
+    #status {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: max(12px, env(safe-area-inset-bottom));
+      z-index: 2147483600;
+      text-align: center;
+      color: rgba(255,255,255,.55);
+      font-size: 11px;
+      pointer-events: auto;
+    }
+    #status:empty { display: none; }
+    @media (prefers-reduced-motion: no-preference) {
+      #player-stage { transition: box-shadow .12s ease; }
+    }
+  </style>
+</head>
+<body>
+  <main id="app" aria-label="Video player">
+    <div id="workspace" aria-hidden="true"></div>
+    <section id="player-stage" aria-label="YouTube video">
+      <div id="video-frame">
+        <div id="player"></div>
+        <div id="tap-shield" aria-label="Tap to show player controls"></div>
+        <div id="drag-strip" aria-label="Hold and drag video"></div>
+        <button id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Fullscreen" aria-hidden="true" tabindex="-1">
+          <svg id="fullscreen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>
+            <path d="M8 8 3 3M16 8l5-5M8 16l-5 5M16 16l5 5"/>
+          </svg>
+        </button>
+        <button id="sound-prompt" type="button" hidden>Tap to play with sound</button>
+      </div>
+    </section>
+    <div id="status" role="status" aria-live="polite"></div>
+  </main>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    (() => {
+      "use strict";
+
+      const app = document.getElementById("app");
+      const workspace = document.getElementById("workspace");
+      const stage = document.getElementById("player-stage");
+      const videoFrame = document.getElementById("video-frame");
+      const fullscreenButton = document.getElementById("fullscreen-button");
+      const fullscreenIcon = document.getElementById("fullscreen-icon");
+      const tapShield = document.getElementById("tap-shield");
+      const soundPrompt = document.getElementById("sound-prompt");
+      const status = document.getElementById("status");
+      const dragStrip = document.getElementById("drag-strip");
+      const telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+      const rootStyle = document.documentElement.style;
+
+      let player = null;
+      let payload = null;
+      let fullscreen = false;
+      let autoplayWasBlocked = false;
+      let dragTimer = null;
+      let dragState = null;
+      let playerLeft = 0;
+      let playerTop = 0;
+      let controlsHideTimer = null;
+      let shieldPointer = null;
+      let viewportWidth = Math.max(1, window.innerWidth || 1);
+      let viewportHeight = Math.max(1, window.innerHeight || 1);
+      let resizeObserver = null;
+
+      function decode(value) {
+        let result = String(value || "").trim();
+        for (let i = 0; i < 2; i += 1) {
+          try {
+            const next = decodeURIComponent(result);
+            if (next === result) break;
+            result = next;
+          } catch (_) { break; }
+        }
+        return result.trim();
+      }
+
+      function parseYouTube(value, depth = 0) {
+        if (!value || depth > 3) return null;
+        const raw = decode(value);
+
+        if (/^pl_[\w-]+$/.test(raw)) return { kind: "playlist", id: raw.slice(3) };
+
+        const prefixed = raw.match(/^(?:yt_|video_)(.+)$/i);
+        if (prefixed) return parseYouTube(prefixed[1], depth + 1);
+
+        if (/^[\w-]{11}$/.test(raw)) return { kind: "video", id: raw };
+
+        let url;
+        try {
+          url = new URL(raw);
+        } catch (_) {
+          return null;
+        }
+
+        const host = url.hostname.replace(/^www\./, "").toLowerCase();
+        if (host === "youtu.be") {
+          const id = url.pathname.split("/").filter(Boolean)[0];
+          if (id && /^[\w-]{11}$/.test(id)) return { kind: "video", id };
+        }
+
+        if (host === "t.me" || host === "telegram.me") {
+          const nested = url.searchParams.get("startapp") || url.searchParams.get("start");
+          if (nested) return parseYouTube(nested, depth + 1);
+        }
+
+        if (host === "youtube.com" || host === "m.youtube.com" || host === "youtube-nocookie.com") {
+          const list = url.searchParams.get("list");
+          const video = url.searchParams.get("v");
+          if (video && /^[\w-]{11}$/.test(video)) return { kind: "video", id: video, list: list || null };
+          if (list) return { kind: "playlist", id: list };
+          const parts = url.pathname.split("/").filter(Boolean);
+          const marker = parts.findIndex(part => ["shorts", "live", "embed", "v"].includes(part));
+          if (marker >= 0 && parts[marker + 1] && /^[\w-]{11}$/.test(parts[marker + 1])) {
+            return { kind: "video", id: parts[marker + 1] };
+          }
+        }
+
+        return null;
+      }
+
+      function getLaunchPayload() {
+        const query = new URLSearchParams(window.location.search);
+        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const values = [
+          telegram && telegram.initDataUnsafe ? telegram.initDataUnsafe.start_param : null,
+          query.get("tgWebAppStartParam"),
+          query.get("startapp"),
+          query.get("video"),
+          query.get("v"),
+          hash.get("tgWebAppStartParam"),
+          hash.get("startapp"),
+          hash.get("video"),
+          hash.get("v")
+        ];
+        for (const value of values) {
+          const parsed = parseYouTube(value);
+          if (parsed) return parsed;
+        }
+        return null;
+      }
+
+      function resizePlayerToFrame() {
+        if (!player || typeof player.setSize !== "function" || !videoFrame) return;
+        // clientWidth/clientHeight are layout dimensions before CSS rotation.
+        const width = videoFrame.clientWidth;
+        const height = videoFrame.clientHeight;
+        if (width < 200 || height < 200) return;
+        player.setSize(Math.round(width), Math.round(height));
+      }
+
+      function schedulePlayerResize() {
+        if (typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(resizePlayerToFrame);
+        } else {
+          resizePlayerToFrame();
+        }
+      }
+
+      function updateViewportMetrics() {
+        const vv = window.visualViewport;
+        const width = Math.max(1, Math.round(vv && vv.width ? vv.width :
+          document.documentElement.clientWidth || window.innerWidth || 1));
+        const height = Math.max(1, Math.round(vv && vv.height ? vv.height :
+          document.documentElement.clientHeight || window.innerHeight || 1));
+        viewportWidth = width;
+        viewportHeight = height;
+        rootStyle.setProperty("--player-viewport-width", width + "px");
+        rootStyle.setProperty("--player-viewport-height", height + "px");
+        const landscapeWidth = height > width
+          ? Math.min(height, width * (16 / 9))
+          : Math.min(width, height * (16 / 9));
+        rootStyle.setProperty("--player-frame-width", Math.max(1, landscapeWidth) + "px");
+        stage.classList.toggle("virtual-rotated", Boolean(fullscreen && height > width));
+        schedulePlayerResize();
+      }
+
+      function setFullscreenUi(value) {
+        fullscreen = Boolean(value);
+        stage.classList.toggle("virtual-fullscreen", fullscreen);
+        fullscreenButton.setAttribute("aria-label", fullscreen ? "Exit virtual landscape" : "Enter virtual landscape");
+        fullscreenButton.title = fullscreen ? "Exit virtual landscape" : "Virtual landscape";
+        playerLeft = 0;
+        playerTop = 0;
+        stage.style.left = "0px";
+        stage.style.top = "0px";
+        updateViewportMetrics();
+      }
+
+      function setControlsVisible(visible, autoHide = true) {
+        const shown = Boolean(visible);
+        stage.classList.toggle("controls-visible", shown);
+        fullscreenButton.setAttribute("aria-hidden", shown ? "false" : "true");
+        fullscreenButton.tabIndex = shown ? 0 : -1;
+        if (controlsHideTimer) {
+          window.clearTimeout(controlsHideTimer);
+          controlsHideTimer = null;
+        }
+        if (shown && autoHide) {
+          controlsHideTimer = window.setTimeout(() => {
+            stage.classList.remove("controls-visible");
+            fullscreenButton.setAttribute("aria-hidden", "true");
+            fullscreenButton.tabIndex = -1;
+            controlsHideTimer = null;
+          }, 2500);
+        }
+      }
+
+      function setStatus(message, showExternalVideo = false) {
+        status.replaceChildren();
+        if (!message) return;
+        status.appendChild(document.createTextNode(message));
+        if (!showExternalVideo || !payload) return;
+        const link = document.createElement("a");
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.style.color = "#fff";
+        link.style.textDecoration = "underline";
+        link.style.marginLeft = "8px";
+        link.textContent = "YouTube में खोलें";
+        link.href = payload.kind === "playlist"
+          ? "https://www.youtube.com/playlist?list=" + encodeURIComponent(payload.id)
+          : "https://www.youtube.com/watch?v=" + encodeURIComponent(payload.id);
+        status.appendChild(link);
+      }
+
+      function enterVirtualLandscape() {
+        setFullscreenUi(true);
+        setStatus("");
+        setControlsVisible(true, true);
+      }
+
+      function exitVirtualLandscape() {
+        setFullscreenUi(false);
+        setStatus("");
+        setControlsVisible(true, true);
+      }
+
+      fullscreenButton.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        setControlsVisible(true, true);
+        if (fullscreen) exitVirtualLandscape();
+        else enterVirtualLandscape();
+      });
+
+      tapShield.addEventListener("pointerdown", event => {
+        if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+        shieldPointer = { id: event.pointerId, x: event.clientX, y: event.clientY };
+        try { tapShield.setPointerCapture(event.pointerId); } catch (_) {}
+      });
+
+      tapShield.addEventListener("pointerup", event => {
+        if (!shieldPointer || shieldPointer.id !== event.pointerId) return;
+        const moved = Math.hypot(event.clientX - shieldPointer.x, event.clientY - shieldPointer.y);
+        shieldPointer = null;
+        if (moved <= 14) {
+          event.preventDefault();
+          setControlsVisible(true, true);
+        }
+      });
+
+      tapShield.addEventListener("pointercancel", () => { shieldPointer = null; });
+      tapShield.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setControlsVisible(true, true);
+        }
+      });
+      if (telegram) {
+        try {
+          telegram.ready();
+          telegram.expand();
+          if (typeof telegram.setHeaderColor === "function") telegram.setHeaderColor("#000000");
+          if (typeof telegram.setBackgroundColor === "function") telegram.setBackgroundColor("#000000");
+        } catch (_) {}
+
+      }
+
+      function enableSound() {
+        if (!player) return;
+        autoplayWasBlocked = false;
+        try {
+          player.unMute();
+          player.setVolume(100);
+          player.playVideo();
+        } catch (_) {}
+        soundPrompt.hidden = true;
+      }
+
+      soundPrompt.addEventListener("click", enableSound);
+
+      window.onYouTubeIframeAPIReady = function () {
+        if (!payload) return;
+        const playerVars = {
+          autoplay: 1,
+          controls: 1,
+          // Keep YouTube's native fullscreen control enabled. Android WebView
+          // handles this request differently from Mini App window expansion.
+          fs: 0,
+          playsinline: 1,
+          rel: 0,
+          modestbranding: 1,
+          enablejsapi: 1,
+          origin: window.location.origin,
+          mute: 0
+        };
+        if (payload.kind === "playlist") {
+          playerVars.listType = "playlist";
+          playerVars.list = payload.id;
+        } else if (payload.list) {
+          playerVars.list = payload.list;
+        }
+
+        const initialFrame = { width: videoFrame.clientWidth, height: videoFrame.clientHeight };
+        const config = {
+          width: Math.round(initialFrame.width),
+          height: Math.round(initialFrame.height),
+          playerVars,
+          events: {
+            onReady(event) {
+              const iframe = event.target.getIframe();
+              iframe.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture; fullscreen; web-share");
+              iframe.setAttribute("allowfullscreen", "");
+              schedulePlayerResize();
+              try {
+                event.target.unMute();
+                event.target.setVolume(100);
+                event.target.playVideo();
+              } catch (_) {}
+            },
+            onStateChange(event) {
+              if (event.data === 1) {
+                soundPrompt.hidden = true;
+                autoplayWasBlocked = false;
+              }
+            },
+            onAutoplayBlocked() {
+              autoplayWasBlocked = true;
+              soundPrompt.hidden = false;
+            },
+            onError() {
+              setStatus("This YouTube video cannot be played here.", true);
+            }
+          }
+        };
+
+        if (payload.kind === "video") config.videoId = payload.id;
+        player = new YT.Player("player", config);
+      };
+
+      function startPlayer() {
+        payload = getLaunchPayload();
+        if (!payload) {
+          setStatus("");
+          return;
+        }
+        const api = document.createElement("script");
+        api.src = "https://www.youtube.com/iframe_api";
+        api.async = true;
+        document.head.appendChild(api);
+      }
+
+      // Long-press on the thin top edge of the video or on the empty black
+      // workspace starts a drag. Short taps and normal YouTube controls are
+      // left untouched. The cross-origin YouTube iframe cannot expose its
+      // internal touch events to this page, so the edge is the safe drag grip.
+      function beginHold(event, source) {
+        if (fullscreen || event.button !== undefined && event.button !== 0) return;
+        if (event.cancelable) event.preventDefault();
+        clearTimeout(dragTimer);
+        const rect = stage.getBoundingClientRect();
+        dragState = {
+          source,
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          offsetX: rect.left - event.clientX,
+          offsetY: rect.top - event.clientY,
+          moved: false,
+          active: false
+        };
+        dragTimer = window.setTimeout(() => {
+          if (!dragState) return;
+          dragState.active = true;
+          stage.classList.add("is-dragging");
+          if (source && source.setPointerCapture && event.pointerId !== undefined) {
+            try { source.setPointerCapture(event.pointerId); } catch (_) {}
+          }
+        }, 430);
+      }
+
+      function moveHold(event) {
+        if (!dragState) return;
+        const dx = event.clientX - dragState.startX;
+        const dy = event.clientY - dragState.startY;
+        if (!dragState.active && Math.hypot(dx, dy) > 8) {
+          clearTimeout(dragTimer);
+          dragState = null;
+          return;
+        }
+        if (!dragState.active) return;
+        if (event.cancelable) event.preventDefault();
+        const width = stage.getBoundingClientRect().width;
+        const height = stage.getBoundingClientRect().height;
+        const maxLeft = Math.max(0, window.innerWidth - width);
+        const maxTop = Math.max(0, window.innerHeight - height);
+        playerLeft = Math.min(maxLeft, Math.max(0, event.clientX + dragState.offsetX));
+        playerTop = Math.min(maxTop, Math.max(0, event.clientY + dragState.offsetY));
+        stage.style.left = playerLeft + "px";
+        stage.style.top = playerTop + "px";
+        dragState.moved = true;
+      }
+
+      function endHold() {
+        clearTimeout(dragTimer);
+        if (dragState && dragState.active) stage.classList.remove("is-dragging");
+        dragState = null;
+      }
+
+      dragStrip.addEventListener("pointerdown", event => beginHold(event, dragStrip));
+      workspace.addEventListener("pointerdown", event => beginHold(event, workspace));
+      window.addEventListener("pointermove", moveHold, { passive: false });
+      window.addEventListener("pointerup", endHold);
+      window.addEventListener("pointercancel", endHold);
+      window.addEventListener("resize", () => {
+        if (!fullscreen) {
+          const maxLeft = Math.max(0, window.innerWidth - stage.getBoundingClientRect().width);
+          const maxTop = Math.max(0, window.innerHeight - stage.getBoundingClientRect().height);
+          playerLeft = Math.min(playerLeft, maxLeft);
+          playerTop = Math.min(playerTop, maxTop);
+          stage.style.left = playerLeft + "px";
+          stage.style.top = playerTop + "px";
+        }
+        updateViewportMetrics();
+      });
+      window.addEventListener("orientationchange", updateViewportMetrics);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", updateViewportMetrics, { passive: true });
+        window.visualViewport.addEventListener("scroll", updateViewportMetrics, { passive: true });
+      }
+      if (typeof ResizeObserver === "function") {
+        resizeObserver = new ResizeObserver(() => updateViewportMetrics());
+        resizeObserver.observe(app);
+      }
+
+
+      updateViewportMetrics();
+      setControlsVisible(false, false);
+      startPlayer();
+    })();
+  </script>
+</body>
+</html>

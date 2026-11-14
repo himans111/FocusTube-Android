@@ -30,26 +30,24 @@ if (!scripts.length) throw new Error("No inline JavaScript found");
 const required = [
   "#video-frame",
   "#video-frame > iframe",
-  "player.setSize(Math.round(rect.width), Math.round(rect.height))",
-  "width: Math.round(initialFrame.width)",
-  "#player-stage.fullscreen",
-  "#player-stage:fullscreen",
-  'stage.requestFullscreen({ navigationUI: "hide" })',
-  "document.fullscreenElement === stage",
-  'orientation.lock("landscape")',
-  "aspect-ratio: 16 / 9",
-  "display: grid",
-  "telegram.requestFullscreen();",
-  "telegramFullscreenUnavailable",
+  "player.setSize(Math.round(width), Math.round(height))",
+  "const width = videoFrame.clientWidth",
+  "const height = videoFrame.clientHeight",
+  "#player-stage.virtual-fullscreen",
+  "#player-stage.virtual-fullscreen.virtual-rotated #video-frame",
+  "transform: rotate(90deg)",
+  "--player-viewport-width",
+  "--player-viewport-height",
+  "--player-frame-width",
+  "window.visualViewport",
+  "new ResizeObserver",
+  "setFullscreenUi(true)",
+  "setFullscreenUi(false)",
   'id="tap-shield"',
   'tapShield.addEventListener("pointerup"',
   "setControlsVisible(false, false)",
   "controls-visible #fullscreen-button",
   "}, 2500);",
-  "telegram.exitFullscreen()",
-  "requestLandscapeOrientationFromTap",
-  "fullscreenChanged",
-  "fullscreenFailed",
   "fs: 0",
   "allowfullscreen",
   "onAutoplayBlocked",
@@ -63,30 +61,21 @@ for (const feature of required) {
 }
 
 const forbidden = [
+  "requestFullscreen(",
+  "document.exitFullscreen",
+  "fullscreenChanged",
+  "fullscreenFailed",
+  "screen.orientation",
+  "orientation.lock",
+  "telegram.isFullscreen",
+  "telegram.requestFullscreen",
+  "telegram.exitFullscreen",
+  "document.fullscreenElement",
   "Media-first Mini App",
-  "lockLandscapeOrientation",
-  "telegram.lockOrientation()",
-  "document.documentElement.requestFullscreen"
+  "telegram.lockOrientation()"
 ];
 for (const feature of forbidden) {
   if (html.includes(feature)) throw new Error("Obsolete fullscreen logic remains: " + feature);
-}
-
-// The page must request Telegram fullscreen only from a real button click,
-// not automatically on page load via a timer.
-const startup = html.slice(html.lastIndexOf("      startPlayer();"));
-if (startup.includes("telegram.requestFullscreen()")) {
-  throw new Error("Fullscreen must not auto-request from the page-load block");
-}
-
-
-const enterIndex = html.indexOf("function enterFullscreen()");
-const exitIndex = html.indexOf("function exitFullscreen()", enterIndex);
-const enterBody = html.slice(enterIndex, exitIndex);
-const hostRequestIndex = enterBody.indexOf("telegram.requestFullscreen();");
-const browserFallbackIndex = enterBody.indexOf("requestBrowserFullscreenFromTap();");
-if (enterIndex < 0 || exitIndex < 0 || hostRequestIndex < 0 || browserFallbackIndex < 0 || hostRequestIndex > browserFallbackIndex) {
-  throw new Error("Telegram host fullscreen must be primary; browser fullscreen is secondary");
 }
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "player-check-"));
@@ -101,4 +90,18 @@ try {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-console.log("PASS: identical deployment copies, Telegram-host-first fullscreen, touch-to-reveal auto-hide control, responsive frame, and inline JavaScript syntax.");
+// Geometry checks for portrait and landscape viewports from mobile through desktop.
+for (const [vw, vh] of [[360, 800], [390, 844], [768, 1024], [1024, 768], [1366, 768], [1920, 1080]]) {
+  const isPortrait = vh > vw;
+  const landscapeWidth = Math.min(isPortrait ? vh : vw, isPortrait ? vw * 16 / 9 : vh * 16 / 9);
+  const videoHeight = landscapeWidth * 9 / 16;
+  const renderedWidth = isPortrait ? videoHeight : landscapeWidth;
+  const renderedHeight = isPortrait ? landscapeWidth : videoHeight;
+  if (renderedWidth > vw + 0.01 || renderedHeight > vh + 0.01) {
+    throw new Error("Virtual landscape geometry overflows viewport " + vw + "x" + vh);
+  }
+  if (Math.abs(landscapeWidth / videoHeight - 16 / 9) > 0.0001) {
+    throw new Error("Virtual landscape aspect ratio changed for " + vw + "x" + vh);
+  }
+}
+console.log("PASS: website-only virtual landscape, multi-size geometry, responsive resizing, touch-to-reveal auto-hide, identical routes and JS syntax.");
