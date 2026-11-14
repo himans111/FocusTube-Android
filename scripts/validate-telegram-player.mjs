@@ -30,6 +30,10 @@ const required = [
   "player.setSize(Math.round(rect.width), Math.round(rect.height))",
   "width: Math.round(initialFrame.width)",
   "#player-stage.fullscreen",
+  "#player-stage:fullscreen",
+  'stage.requestFullscreen({ navigationUI: "hide" })',
+  "document.fullscreenElement === stage",
+  "screen.orientation.lock",
   "aspect-ratio: 16 / 9",
   "display: grid",
   "telegram.requestFullscreen();",
@@ -51,8 +55,9 @@ for (const feature of required) {
 
 const forbidden = [
   "Media-first Mini App",
-  "lockLandscapeOrientation",
-  "telegram.lockOrientation()"
+  "requestLandscapeOrientationFromTap",
+  "telegram.lockOrientation()",
+  "document.documentElement.requestFullscreen"
 ];
 for (const feature of forbidden) {
   if (html.includes(feature)) throw new Error("Obsolete fullscreen logic remains: " + feature);
