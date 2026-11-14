@@ -372,5 +372,5 @@ if (failures.length) {
   for (const failure of failures) console.error(failure);
   process.exitCode = 1;
 } else {
-  console.log("PASS: all seven Chromium viewport regression cases.");
+  console.log("PASS: all nine Chromium viewport regression cases.");
 }
