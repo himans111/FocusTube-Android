@@ -32,8 +32,8 @@ const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
 if (!scripts.length) throw new Error("No inline JavaScript found");
 
 const controlPlacement = `      </div>
-      <!-- Controls stay separate from the video frame so they remain reachable
-           in portrait, landscape and sensor-rotated fullscreen modes. -->
+      <!-- Controls remain siblings of the video frame but inside the same
+           rotatable stage, so the video and control strip turn together. -->
       <div id="tap-shield"`;
 if (!html.includes(controlPlacement)) {
   throw new Error("Fullscreen/touch controls must be siblings of the rotated video frame");
@@ -48,8 +48,10 @@ const required = [
   "player.setSize(width, height)",
   "#player-stage.virtual-fullscreen",
   "#player-stage.virtual-fullscreen #video-frame",
-  "#player-stage.virtual-fullscreen.virtual-device-landscape #video-frame",
-  "transform: translate(-50%, -50%) rotate(90deg)",
+  "#player-stage.virtual-fullscreen.virtual-device-landscape {",
+  "transform: translate(-50%, -50%) rotate(90deg) !important;",
+  "width: var(--player-frame-width) !important;",
+  "height: var(--player-frame-height) !important;",
   "const virtualDeviceLandscape = Boolean(",
   "const videoFrameWidth = virtualDeviceLandscape ? height : width",
   "const videoFrameHeight = virtualDeviceLandscape ? width : height",
@@ -104,7 +106,8 @@ const forbidden = [
   "orientation.lock",
   "document.fullscreenElement",
   "Media-first Mini App",
-  "telegram.lockOrientation()"
+  "telegram.lockOrientation()",
+  "#player-stage.virtual-fullscreen.virtual-device-landscape #video-frame"
 ];
 for (const feature of forbidden) {
   if (html.includes(feature)) throw new Error("Obsolete fullscreen logic remains: " + feature);
@@ -136,4 +139,4 @@ for (const [vw, vh] of [
   }
 }
 
-console.log("PASS: route parity, JavaScript syntax, fullscreen API exclusions, viewport sizing, sensor rotation, responsive mini-player sizing and Telegram viewport integration.");
+console.log("PASS: route parity, JavaScript syntax, fullscreen API exclusions, viewport sizing, whole-stage sensor rotation, responsive mini-player sizing and Telegram viewport integration.");

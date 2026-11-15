@@ -87,10 +87,9 @@
       cursor: pointer;
     }
     #player-stage.controls-visible #tap-shield { pointer-events: none; }
-    /* Fullscreen uses the measured web-app viewport as the YouTube player
-       viewport. YouTube fits each source video's own aspect ratio inside it.
-       If the phone is physically turned sideways while Android auto-rotate is
-       locked, rotate only the player frame using the orientation sensor. */
+    /* Fullscreen uses the measured web-app viewport. When Android
+       auto-rotate is disabled and the device is turned sideways, rotate the
+       complete stage so the YouTube player AND its controls turn together. */
     #player-stage.virtual-fullscreen {
       position: fixed !important;
       inset: 0 !important;
@@ -111,19 +110,25 @@
       background: #000;
       overscroll-behavior: contain;
       touch-action: manipulation;
+      will-change: transform, width, height;
     }
     #player-stage.virtual-fullscreen #video-frame {
       position: absolute;
-      left: 50%;
-      top: 50%;
-      width: var(--player-frame-width);
-      height: var(--player-frame-height);
+      inset: 0;
+      width: 100%;
+      height: 100%;
       aspect-ratio: auto;
-      transform: translate(-50%, -50%);
-      transform-origin: center center;
+      transform: none;
     }
-    #player-stage.virtual-fullscreen.virtual-device-landscape #video-frame {
-      transform: translate(-50%, -50%) rotate(90deg);
+    #player-stage.virtual-fullscreen.virtual-device-landscape {
+      left: 50% !important;
+      top: 50% !important;
+      right: auto !important;
+      bottom: auto !important;
+      width: var(--player-frame-width) !important;
+      height: var(--player-frame-height) !important;
+      transform: translate(-50%, -50%) rotate(90deg) !important;
+      transform-origin: center center;
     }
     #player-stage.virtual-fullscreen #drag-strip { display: none; }
     #drag-strip {
@@ -229,8 +234,8 @@
       <div id="video-frame">
         <div id="player"></div>
       </div>
-      <!-- Controls stay separate from the video frame so they remain reachable
-           in portrait, landscape and sensor-rotated fullscreen modes. -->
+      <!-- Controls remain siblings of the video frame but inside the same
+           rotatable stage, so the video and control strip turn together. -->
       <div id="tap-shield" aria-label="Tap to show player controls"></div>
       <div id="drag-strip" aria-label="Hold and drag video"></div>
       <button id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Fullscreen" aria-hidden="true" tabindex="-1">
@@ -359,8 +364,9 @@
 
       function resizePlayerToFrame() {
         if (!videoFrame) return;
-        // Use the layout box before rotate(90deg). The YouTube iframe itself is
-        // cross-origin, but its outer element remains ours and can be resized.
+        // The frame is the logical player canvas. In sensor-landscape mode
+        // its parent stage is rotated, so these are the swapped layout sizes.
+        // The YouTube iframe is cross-origin, but its outer box remains ours.
         const width = Math.round(videoFrame.clientWidth);
         const height = Math.round(videoFrame.clientHeight);
         if (width < 200 || height < 200) return;
@@ -446,9 +452,9 @@
         rootStyle.setProperty("--player-viewport-width", width + "px");
         rootStyle.setProperty("--player-viewport-height", height + "px");
 
-        // Normally the YouTube iframe receives the exact measured viewport.
-        // If the phone is sideways but Android keeps the webview in portrait,
-        // swap frame dimensions and rotate that frame only, without OS locking.
+        // If the device is sideways while Android keeps the webview portrait,
+        // use landscape logical dimensions and rotate the entire player stage.
+        // This keeps YouTube controls and our overlay controls aligned together.
         const virtualDeviceLandscape = Boolean(
           fullscreen && height > width && deviceIsLandscape === true
         );

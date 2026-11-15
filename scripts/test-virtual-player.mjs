@@ -200,10 +200,14 @@ try {
       item.name + ": sound prompt did not disappear after user gesture");
 
     const readInitialGeometryForSensor = async page => page.evaluate(() => {
+      const stage = document.querySelector("#player-stage");
       const frame = document.querySelector("#video-frame");
       const r = frame.getBoundingClientRect();
       const iframe = document.querySelector("#mock-youtube-iframe");
       return {
+        stageLayout: { width: stage.clientWidth, height: stage.clientHeight },
+        stageTransform: getComputedStyle(stage).transform,
+        frameTransform: getComputedStyle(frame).transform,
         frame: { x: r.x, y: r.y, width: r.width, height: r.height },
         layout: { width: frame.clientWidth, height: frame.clientHeight },
         iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) }
@@ -257,6 +261,14 @@ try {
         iframe: sensorLandscape.iframe
       }, item.width, item.height, item.name + " sensor landscape",
       item.height, item.width);
+      approx(sensorLandscape.stageLayout.width, item.height, 1,
+        item.name + ": sensor rotation did not swap the complete player-stage width");
+      approx(sensorLandscape.stageLayout.height, item.width, 1,
+        item.name + ": sensor rotation did not swap the complete player-stage height");
+      assert.notEqual(sensorLandscape.stageTransform, "none",
+        item.name + ": complete player stage did not rotate with the physical device");
+      assert.equal(sensorLandscape.frameTransform, "none",
+        item.name + ": video frame should stay unrotated inside the rotated player stage");
 
       await page.evaluate(() => {
         const upright = new Event("deviceorientation");
@@ -447,7 +459,7 @@ try {
 
     console.log("PASS " + item.name +
       ": automatic fullscreen, Telegram viewport event, physical control clicks, " +
-      "virtual rotation, cover-fit, iframe resize and exit restoration");
+      "whole-stage sensor rotation, iframe resize and exit restoration");
     await context.close();
   }
 } catch (error) {
