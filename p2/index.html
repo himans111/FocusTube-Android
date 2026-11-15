@@ -14,6 +14,7 @@
       --player-viewport-height: 100vh;
       --player-frame-width: 100vw;
       --player-frame-height: 100vh;
+      --video-zoom: 1;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -75,6 +76,11 @@
       border: 0;
       background: #000;
     }
+    #video-frame > iframe {
+      transform: scale(var(--video-zoom));
+      transform-origin: center center;
+      transition: transform .16s ease;
+    }
     /* While the custom control is hidden, this transparent layer catches one
        tap and reveals it. When controls are visible it becomes click-through,
        so YouTube playback/seek controls remain usable. */
@@ -120,15 +126,84 @@
       aspect-ratio: auto;
       transform: none;
     }
-    #player-stage.virtual-fullscreen.virtual-device-landscape {
+    #player-stage.virtual-fullscreen.virtual-device-landscape-left,
+    #player-stage.virtual-fullscreen.virtual-device-landscape-right {
       left: 50% !important;
       top: 50% !important;
       right: auto !important;
       bottom: auto !important;
       width: var(--player-frame-width) !important;
       height: var(--player-frame-height) !important;
-      transform: translate(-50%, -50%) rotate(90deg) !important;
       transform-origin: center center;
+    }
+    #player-stage.virtual-fullscreen.virtual-device-landscape-left {
+      transform: translate(-50%, -50%) rotate(-90deg) !important;
+    }
+    #player-stage.virtual-fullscreen.virtual-device-landscape-right {
+      transform: translate(-50%, -50%) rotate(90deg) !important;
+    }
+    #player-stage.virtual-fullscreen {
+      transition: transform .22s ease, width .22s ease, height .22s ease;
+    }
+    #player-stage.virtual-fullscreen #player-toolbar {
+      position: absolute;
+      z-index: 7;
+      top: max(10px, env(safe-area-inset-top));
+      left: 50%;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      max-width: calc(100% - 92px);
+      padding: 5px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 999px;
+      background: rgba(18,18,18,.72);
+      box-shadow: 0 4px 22px rgba(0,0,0,.3);
+      -webkit-backdrop-filter: blur(16px);
+      backdrop-filter: blur(16px);
+      transform: translateX(-50%);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity .16s ease, visibility .16s ease;
+    }
+    #player-stage.virtual-fullscreen.controls-visible #player-toolbar {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+    .player-tool-button {
+      display: grid;
+      place-items: center;
+      flex: 0 0 38px;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: #fff;
+      background: rgba(255,255,255,.1);
+      font: 600 19px/1 system-ui, sans-serif;
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .player-tool-button:active { background: rgba(255,255,255,.26); }
+    .player-tool-button:focus-visible,
+    #fullscreen-button:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: 2px;
+    }
+    .player-tool-button:disabled {
+      opacity: .35;
+      cursor: default;
+    }
+    #zoom-value {
+      min-width: 44px;
+      color: rgba(255,255,255,.92);
+      text-align: center;
+      font: 600 12px/1 system-ui, sans-serif;
+      font-variant-numeric: tabular-nums;
     }
     #player-stage.virtual-fullscreen #drag-strip { display: none; }
     #drag-strip {
@@ -238,6 +313,14 @@
            rotatable stage, so the video and control strip turn together. -->
       <div id="tap-shield" aria-label="Tap to show player controls"></div>
       <div id="drag-strip" aria-label="Hold and drag video"></div>
+      <div id="player-toolbar" role="group" aria-label="Fullscreen video tools" aria-hidden="true">
+        <button class="player-tool-button" id="rotate-left-button" type="button" title="Rotate left" aria-label="Rotate left">↶</button>
+        <button class="player-tool-button" id="rotate-right-button" type="button" title="Rotate right" aria-label="Rotate right">↷</button>
+        <button class="player-tool-button" id="zoom-out-button" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+        <span id="zoom-value" aria-live="polite">100%</span>
+        <button class="player-tool-button" id="zoom-in-button" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+        <button class="player-tool-button" id="zoom-reset-button" type="button" title="Reset zoom" aria-label="Reset zoom">1×</button>
+      </div>
       <button id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Fullscreen" aria-hidden="true" tabindex="-1">
         <svg id="fullscreen-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>
@@ -261,6 +344,13 @@
       const fullscreenButton = document.getElementById("fullscreen-button");
       const fullscreenIcon = document.getElementById("fullscreen-icon");
       const tapShield = document.getElementById("tap-shield");
+      const playerToolbar = document.getElementById("player-toolbar");
+      const rotateLeftButton = document.getElementById("rotate-left-button");
+      const rotateRightButton = document.getElementById("rotate-right-button");
+      const zoomOutButton = document.getElementById("zoom-out-button");
+      const zoomInButton = document.getElementById("zoom-in-button");
+      const zoomResetButton = document.getElementById("zoom-reset-button");
+      const zoomValue = document.getElementById("zoom-value");
       const soundPrompt = document.getElementById("sound-prompt");
       const status = document.getElementById("status");
       const dragStrip = document.getElementById("drag-strip");
@@ -280,7 +370,13 @@
       let viewportWidth = Math.max(1, window.innerWidth || 1);
       let viewportHeight = Math.max(1, window.innerHeight || 1);
       let telegramViewportIsStable = true;
-      let deviceIsLandscape = null;
+      // Rotation is limited to fullscreen. Signed values distinguish the
+      // two landscape directions while Android's system auto-rotate stays off.
+      let deviceRotation = 0;
+      let videoZoom = 1;
+      const MIN_VIDEO_ZOOM = 1;
+      const MAX_VIDEO_ZOOM = 2.5;
+      const VIDEO_ZOOM_STEP = 0.25;
       let deviceOrientationListening = false;
       let deviceOrientationPermissionAsked = false;
       let resizeObserver = null;
@@ -456,26 +552,37 @@
         // use landscape logical dimensions and rotate the entire player stage.
         // This keeps YouTube controls and our overlay controls aligned together.
         const virtualDeviceLandscape = Boolean(
-          fullscreen && height > width && deviceIsLandscape === true
+          fullscreen && height > width && deviceRotation !== 0
         );
+        const landscapeLeft = virtualDeviceLandscape && deviceRotation < 0;
+        const landscapeRight = virtualDeviceLandscape && deviceRotation > 0;
         const videoFrameWidth = virtualDeviceLandscape ? height : width;
         const videoFrameHeight = virtualDeviceLandscape ? width : height;
         rootStyle.setProperty("--player-frame-width", videoFrameWidth + "px");
         rootStyle.setProperty("--player-frame-height", videoFrameHeight + "px");
-        stage.classList.toggle("virtual-device-landscape", virtualDeviceLandscape);
+        stage.classList.toggle("virtual-device-landscape-left", landscapeLeft);
+        stage.classList.toggle("virtual-device-landscape-right", landscapeRight);
         schedulePlayerResize();
       }
 
       function handleDeviceOrientation(event) {
-        if (!fullscreen || viewportHeight <= viewportWidth) return;
+        // Never rotate the mini-player. When the webview already resized to
+        // landscape, the browser/Telegram has done the rotation for us.
+        if (!fullscreen || viewportHeight <= viewportWidth) {
+          if (deviceRotation !== 0 && viewportHeight <= viewportWidth) {
+            deviceRotation = 0;
+            updateViewportMetrics();
+          }
+          return;
+        }
         const gamma = Number(event && event.gamma);
         if (!Number.isFinite(gamma)) return;
-        const tilt = Math.abs(gamma);
-        let nextState = deviceIsLandscape;
-        if (tilt >= 55) nextState = true;
-        else if (tilt <= 35) nextState = false;
-        if (nextState !== deviceIsLandscape) {
-          deviceIsLandscape = nextState;
+        let nextRotation = deviceRotation;
+        if (gamma >= 55) nextRotation = 90;
+        else if (gamma <= -55) nextRotation = -90;
+        else if (Math.abs(gamma) <= 35) nextRotation = 0;
+        if (nextRotation !== deviceRotation) {
+          deviceRotation = nextRotation;
           updateViewportMetrics();
         }
       }
@@ -525,6 +632,7 @@
 
       function setFullscreenUi(value) {
         fullscreen = Boolean(value);
+        if (!fullscreen) deviceRotation = 0;
         stage.classList.toggle("virtual-fullscreen", fullscreen);
         fullscreenButton.setAttribute("aria-label", fullscreen ? "Exit fullscreen" : "Enter fullscreen");
         fullscreenButton.title = fullscreen ? "Exit fullscreen" : "Fullscreen";
@@ -540,6 +648,10 @@
           stage.style.top = "50%";
           stage.style.transform = "translate(-50%, -50%)";
         }
+        if (!fullscreen) {
+          videoZoom = 1;
+          applyVideoZoom();
+        }
         updateViewportMetrics();
       }
 
@@ -548,6 +660,7 @@
         stage.classList.toggle("controls-visible", shown);
         fullscreenButton.setAttribute("aria-hidden", shown ? "false" : "true");
         fullscreenButton.tabIndex = shown ? 0 : -1;
+        playerToolbar.setAttribute("aria-hidden", shown && fullscreen ? "false" : "true");
         if (controlsHideTimer) {
           window.clearTimeout(controlsHideTimer);
           controlsHideTimer = null;
@@ -557,6 +670,7 @@
             stage.classList.remove("controls-visible");
             fullscreenButton.setAttribute("aria-hidden", "true");
             fullscreenButton.tabIndex = -1;
+            playerToolbar.setAttribute("aria-hidden", "true");
             controlsHideTimer = null;
           }, 2500);
         }
@@ -580,9 +694,34 @@
         status.appendChild(link);
       }
 
+      function applyVideoZoom() {
+        const value = Math.round(videoZoom * 100);
+        rootStyle.setProperty("--video-zoom", videoZoom.toFixed(2));
+        zoomValue.textContent = value + "%";
+        zoomOutButton.disabled = videoZoom <= MIN_VIDEO_ZOOM;
+        zoomInButton.disabled = videoZoom >= MAX_VIDEO_ZOOM;
+        zoomResetButton.disabled = videoZoom === 1;
+      }
+
+      function setVideoZoom(value) {
+        const next = Math.min(MAX_VIDEO_ZOOM, Math.max(MIN_VIDEO_ZOOM,
+          Math.round(value / VIDEO_ZOOM_STEP) * VIDEO_ZOOM_STEP));
+        videoZoom = Number(next.toFixed(2));
+        applyVideoZoom();
+        setControlsVisible(true, true);
+      }
+
+      function setDeviceRotation(value) {
+        if (!fullscreen) return;
+        deviceRotation = value === -90 ? -90 : value === 90 ? 90 : 0;
+        updateViewportMetrics();
+        setControlsVisible(true, true);
+      }
+
       function enterVirtualLandscape() {
         requestTelegramFullscreen();
         setFullscreenUi(true);
+        enableDeviceOrientationTracking(true);
         setStatus("");
         setControlsVisible(true, true);
       }
@@ -601,6 +740,33 @@
         setControlsVisible(true, true);
         if (fullscreen) exitVirtualLandscape();
         else enterVirtualLandscape();
+      });
+
+      rotateLeftButton.addEventListener("click", () => setDeviceRotation(-90));
+      rotateRightButton.addEventListener("click", () => setDeviceRotation(90));
+      zoomOutButton.addEventListener("click", () => setVideoZoom(videoZoom - VIDEO_ZOOM_STEP));
+      zoomInButton.addEventListener("click", () => setVideoZoom(videoZoom + VIDEO_ZOOM_STEP));
+      zoomResetButton.addEventListener("click", () => setVideoZoom(1));
+
+      window.addEventListener("keydown", event => {
+        if (!fullscreen || event.altKey || event.ctrlKey || event.metaKey) return;
+        if (event.target && /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
+        if (event.key === "+" || event.key === "=") {
+          event.preventDefault();
+          setVideoZoom(videoZoom + VIDEO_ZOOM_STEP);
+        } else if (event.key === "-") {
+          event.preventDefault();
+          setVideoZoom(videoZoom - VIDEO_ZOOM_STEP);
+        } else if (event.key === "0") {
+          event.preventDefault();
+          setVideoZoom(1);
+        } else if (event.key === "[") {
+          event.preventDefault();
+          setDeviceRotation(-90);
+        } else if (event.key === "]") {
+          event.preventDefault();
+          setDeviceRotation(90);
+        }
       });
 
       tapShield.addEventListener("pointerdown", event => {
@@ -864,6 +1030,7 @@
 
 
       updateViewportMetrics();
+      applyVideoZoom();
       setControlsVisible(false, false);
       startPlayer();
     })();

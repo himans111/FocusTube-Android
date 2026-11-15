@@ -246,7 +246,7 @@ try {
         window.dispatchEvent(sideways);
       });
       await page.waitForFunction(() =>
-        document.querySelector("#player-stage").classList.contains("virtual-device-landscape")
+        document.querySelector("#player-stage").classList.contains("virtual-device-landscape-right")
       );
       await page.waitForFunction(() => {
         const frame = document.querySelector("#video-frame");
@@ -269,6 +269,27 @@ try {
         item.name + ": complete player stage did not rotate with the physical device");
       assert.equal(sensorLandscape.frameTransform, "none",
         item.name + ": video frame should stay unrotated inside the rotated player stage");
+      const rightRotation = await page.evaluate(() => {
+        const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
+        return new DOMMatrixReadOnly(transform).b;
+      });
+      approx(rightRotation, 1, 0.02,
+        item.name + ": right-side rotation should use the positive 90-degree direction");
+
+      await page.evaluate(() => {
+        const sideways = new Event("deviceorientation");
+        Object.defineProperty(sideways, "gamma", { value: -90 });
+        window.dispatchEvent(sideways);
+      });
+      await page.waitForFunction(() =>
+        document.querySelector("#player-stage").classList.contains("virtual-device-landscape-left")
+      );
+      const leftRotation = await page.evaluate(() => {
+        const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
+        return new DOMMatrixReadOnly(transform).b;
+      });
+      approx(leftRotation, -1, 0.02,
+        item.name + ": left-side rotation should use the negative 90-degree direction");
 
       await page.evaluate(() => {
         const upright = new Event("deviceorientation");
@@ -288,9 +309,42 @@ try {
 
     assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "true",
       item.name + ": controls should begin hidden");
+    assert.equal(await page.locator("#player-toolbar").getAttribute("aria-hidden"), "true",
+      item.name + ": tool bar should begin hidden");
     await page.locator("#tap-shield").click({ position: { x: 20, y: 20 } });
     assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "false",
       item.name + ": touch did not reveal controls");
+    assert.equal(await page.locator("#player-toolbar").getAttribute("aria-hidden"), "false",
+      item.name + ": fullscreen toolbar did not appear");
+    await page.locator("#zoom-in-button").click();
+    assert.equal(await page.locator("#zoom-value").textContent(), "125%",
+      item.name + ": zoom-in did not update the zoom indicator");
+    assert.equal(await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue("--video-zoom").trim()
+    ), "1.25", item.name + ": zoom-in did not update the player scale");
+    await page.locator("#zoom-out-button").click();
+    assert.equal(await page.locator("#zoom-value").textContent(), "100%",
+      item.name + ": zoom-out did not return to 100 percent");
+    assert.equal(await page.locator("#zoom-out-button").isDisabled(), true,
+      item.name + ": zoom-out should be disabled at minimum zoom");
+    await page.locator("#zoom-in-button").click();
+    await page.locator("#zoom-reset-button").click();
+    assert.equal(await page.locator("#zoom-value").textContent(), "100%",
+      item.name + ": reset zoom did not restore 100 percent");
+
+    await page.locator("#rotate-left-button").click();
+    assert.equal(await page.locator("#player-stage").evaluate(el =>
+      el.classList.contains("virtual-device-landscape-left")
+    ), item.height > item.width,
+    item.name + ": manual left rotation should only rotate portrait viewports");
+    await page.locator("#rotate-right-button").click();
+    assert.equal(await page.locator("#player-stage").evaluate(el =>
+      el.classList.contains("virtual-device-landscape-right")
+    ), item.height > item.width,
+    item.name + ": manual right rotation should only rotate portrait viewports");
+    await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "0" })));
+    assert.equal(await page.locator("#zoom-value").textContent(), "100%",
+      item.name + ": keyboard zoom reset shortcut did not work");
     await page.waitForTimeout(2600);
     assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "true",
       item.name + ": controls did not auto-hide");
@@ -299,6 +353,17 @@ try {
     await page.waitForFunction(() =>
       !document.querySelector("#player-stage").classList.contains("virtual-fullscreen")
     );
+    if (item.height > item.width) {
+      await page.evaluate(() => {
+        const sideways = new Event("deviceorientation");
+        Object.defineProperty(sideways, "gamma", { value: 90 });
+        window.dispatchEvent(sideways);
+      });
+      assert.equal(await page.locator("#player-stage").evaluate(el =>
+        el.classList.contains("virtual-device-landscape-right") ||
+        el.classList.contains("virtual-device-landscape-left")
+      ), false, item.name + ": rotation must be disabled outside fullscreen");
+    }
     // Exiting virtual fullscreen intentionally leaves the control visible,
     // so the same fullscreen button can immediately re-enter without tapping
     // the now-small mini-player's touch shield.
@@ -458,8 +523,8 @@ try {
       item.name + ": exiting fullscreen did not restore vertical centering");
 
     console.log("PASS " + item.name +
-      ": automatic fullscreen, Telegram viewport event, physical control clicks, " +
-      "whole-stage sensor rotation, iframe resize and exit restoration");
+      ": automatic fullscreen, both sensor directions, zoom toolbar, " +
+      "rotation gating, iframe resize and exit restoration");
     await context.close();
   }
 } catch (error) {

@@ -48,7 +48,9 @@ const required = [
   "player.setSize(width, height)",
   "#player-stage.virtual-fullscreen",
   "#player-stage.virtual-fullscreen #video-frame",
-  "#player-stage.virtual-fullscreen.virtual-device-landscape {",
+  "#player-stage.virtual-fullscreen.virtual-device-landscape-left",
+  "#player-stage.virtual-fullscreen.virtual-device-landscape-right",
+  "transform: translate(-50%, -50%) rotate(-90deg) !important;",
   "transform: translate(-50%, -50%) rotate(90deg) !important;",
   "width: var(--player-frame-width) !important;",
   "height: var(--player-frame-height) !important;",
@@ -56,6 +58,18 @@ const required = [
   "const videoFrameWidth = virtualDeviceLandscape ? height : width",
   "const videoFrameHeight = virtualDeviceLandscape ? width : height",
   "function handleDeviceOrientation(event)",
+  "gamma >= 55",
+  "gamma <= -55",
+  "let deviceRotation = 0;",
+  'id="player-toolbar"',
+  'id="zoom-in-button"',
+  'id="zoom-out-button"',
+  'id="zoom-reset-button"',
+  'id="rotate-left-button"',
+  'id="rotate-right-button"',
+  "const MAX_VIDEO_ZOOM = 2.5;",
+  "function applyVideoZoom()",
+  "function setVideoZoom(value)",
   "Math.abs(gamma)",
   "window.addEventListener(\"deviceorientation\", handleDeviceOrientation, true)",
   "--player-viewport-width",
@@ -139,4 +153,4 @@ for (const [vw, vh] of [
   }
 }
 
-console.log("PASS: route parity, JavaScript syntax, fullscreen API exclusions, viewport sizing, whole-stage sensor rotation, responsive mini-player sizing and Telegram viewport integration.");
+console.log("PASS: route parity, JavaScript syntax, fullscreen API exclusions, dual-side sensor rotation, fullscreen-only rotation, zoom tools and Telegram viewport integration.");
