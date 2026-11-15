@@ -391,6 +391,12 @@ try {
     await page.waitForFunction(() =>
       document.querySelector("#player-stage").classList.contains("virtual-fullscreen")
     );
+    await page.waitForFunction(() => {
+      const matrix = new DOMMatrixReadOnly(
+        getComputedStyle(document.querySelector("#player-stage")).transform
+      );
+      return matrix.a > 0.99999 && Math.abs(matrix.b) < 0.0001;
+    });
 
     const waitForIframeToMatchFrame = () => page.waitForFunction(() => {
       const frame = document.querySelector("#video-frame");
@@ -444,6 +450,12 @@ try {
         .getPropertyValue("--player-viewport-height"));
       return Math.abs(measured - expected) <= 1 && Math.abs(app.height - expected) <= 1;
     }, telegramStableHeight);
+    await page.waitForFunction(() => {
+      const matrix = new DOMMatrixReadOnly(
+        getComputedStyle(document.querySelector("#player-stage")).transform
+      );
+      return matrix.a > 0.99999 && Math.abs(matrix.b) < 0.0001;
+    });
     await waitForIframeToMatchFrame();
     const telegramSized = await readFullGeometry();
     assert.equal(telegramSized.deviceLandscape, false,
@@ -490,10 +502,12 @@ try {
       const stage = document.querySelector("#player-stage");
       const app = document.querySelector("#app").getBoundingClientRect();
       const full = stage.getBoundingClientRect();
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(stage).transform);
       return Math.abs(full.width - app.width) <= 1 &&
         Math.abs(full.height - app.height) <= 1 &&
         !stage.classList.contains("virtual-device-landscape-left") &&
-        !stage.classList.contains("virtual-device-landscape-right");
+        !stage.classList.contains("virtual-device-landscape-right") &&
+        matrix.a > 0.99999 && Math.abs(matrix.b) < 0.0001;
     });
     await waitForIframeToMatchFrame();
     const turned = await readFullGeometry();
@@ -520,10 +534,12 @@ try {
       const stage = document.querySelector("#player-stage");
       const app = document.querySelector("#app").getBoundingClientRect();
       const full = stage.getBoundingClientRect();
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(stage).transform);
       return Math.abs(full.width - app.width) <= 1 &&
         Math.abs(full.height - app.height) <= 1 &&
         !stage.classList.contains("virtual-device-landscape-left") &&
-        !stage.classList.contains("virtual-device-landscape-right");
+        !stage.classList.contains("virtual-device-landscape-right") &&
+        matrix.a > 0.99999 && Math.abs(matrix.b) < 0.0001;
     });
     await waitForIframeToMatchFrame();
     const restoredOrientation = await readFullGeometry();
