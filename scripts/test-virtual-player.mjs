@@ -406,7 +406,8 @@ try {
       return {
         viewport: { width: app.width, height: app.height },
         active: stage.classList.contains("virtual-fullscreen"),
-        deviceLandscape: stage.classList.contains("virtual-device-landscape"),
+        deviceLandscape: stage.classList.contains("virtual-device-landscape-left") ||
+          stage.classList.contains("virtual-device-landscape-right"),
         stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
         frame: { x: frameRect.x, y: frameRect.y, width: frameRect.width, height: frameRect.height },
         layout: { width: frame.clientWidth, height: frame.clientHeight },
@@ -485,7 +486,8 @@ try {
       const full = stage.getBoundingClientRect();
       return Math.abs(full.width - app.width) <= 1 &&
         Math.abs(full.height - app.height) <= 1 &&
-        !stage.classList.contains("virtual-device-landscape");
+        !stage.classList.contains("virtual-device-landscape-left") &&
+        !stage.classList.contains("virtual-device-landscape-right");
     });
     await waitForIframeToMatchFrame();
     const turned = await readFullGeometry();
@@ -514,7 +516,8 @@ try {
       const full = stage.getBoundingClientRect();
       return Math.abs(full.width - app.width) <= 1 &&
         Math.abs(full.height - app.height) <= 1 &&
-        !stage.classList.contains("virtual-device-landscape");
+        !stage.classList.contains("virtual-device-landscape-left") &&
+        !stage.classList.contains("virtual-device-landscape-right");
     });
     await waitForIframeToMatchFrame();
     const restoredOrientation = await readFullGeometry();
