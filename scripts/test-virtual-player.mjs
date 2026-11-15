@@ -255,8 +255,10 @@ try {
           Math.abs(parseFloat(iframe.style.height) - frame.clientHeight) <= 1;
       });
       await page.waitForFunction(() => {
-        const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
-        return Math.abs(new DOMMatrixReadOnly(transform).b) > 0.98;
+        const matrix = new DOMMatrixReadOnly(
+          getComputedStyle(document.querySelector("#player-stage")).transform
+        );
+        return Math.abs(matrix.a) < 0.02 && matrix.b > 0.99;
       });
       const sensorLandscape = await readInitialGeometryForSensor(page);
       assertViewportGeometry({
@@ -289,8 +291,10 @@ try {
         document.querySelector("#player-stage").classList.contains("virtual-device-landscape-left")
       );
       await page.waitForFunction(() => {
-        const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
-        return new DOMMatrixReadOnly(transform).b < -0.98;
+        const matrix = new DOMMatrixReadOnly(
+          getComputedStyle(document.querySelector("#player-stage")).transform
+        );
+        return Math.abs(matrix.a) < 0.02 && matrix.b < -0.99;
       });
       const leftRotation = await page.evaluate(() => {
         const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
@@ -310,8 +314,10 @@ try {
           !stage.classList.contains("virtual-device-landscape-right");
       });
       await page.waitForFunction(() => {
-        const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
-        return Math.abs(new DOMMatrixReadOnly(transform).b) < 0.02;
+        const matrix = new DOMMatrixReadOnly(
+          getComputedStyle(document.querySelector("#player-stage")).transform
+        );
+        return matrix.a > 0.99 && Math.abs(matrix.b) < 0.02;
       });
       await page.waitForFunction(() => {
         const frame = document.querySelector("#video-frame");
