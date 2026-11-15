@@ -31,21 +31,15 @@ function approx(actual, expected, tolerance, message) {
     message + ": expected " + expected + ", got " + actual);
 }
 
-function assertCoverGeometry(geometry, width, height, name) {
-  approx(geometry.frame.x + geometry.frame.width / 2, width / 2, 1,
-    name + ": virtual landscape is not horizontally centered");
-  approx(geometry.frame.y + geometry.frame.height / 2, height / 2, 1,
-    name + ": virtual landscape is not vertically centered");
-  assert.ok(geometry.frame.x <= 1 && geometry.frame.x + geometry.frame.width >= width - 1,
-    name + ": video frame leaves an uncovered horizontal strip: " + JSON.stringify(geometry));
-  assert.ok(geometry.frame.y <= 1 && geometry.frame.y + geometry.frame.height >= height - 1,
-    name + ": video frame leaves an uncovered vertical strip: " + JSON.stringify(geometry));
-  assert.ok(Math.abs(geometry.layout.width / geometry.layout.height - 16 / 9) < 0.02,
-    name + ": source video frame lost its 16:9 ratio: " + JSON.stringify(geometry));
-  approx(geometry.iframe.width, geometry.layout.width, 1,
-    name + ": YouTube iframe width does not match its layout frame");
-  approx(geometry.iframe.height, geometry.layout.height, 1,
-    name + ": YouTube iframe height does not match its layout frame");
+function assertViewportGeometry(geometry, width, height, name, layoutWidth = width, layoutHeight = height) {
+  approx(geometry.frame.x, 0, 1, name + ": video frame is not aligned to the left edge");
+  approx(geometry.frame.y, 0, 1, name + ": video frame is not aligned to the top edge");
+  approx(geometry.frame.width, width, 1, name + ": video frame does not fill viewport width");
+  approx(geometry.frame.height, height, 1, name + ": video frame does not fill viewport height");
+  approx(geometry.layout.width, layoutWidth, 1, name + ": player layout width is incorrect");
+  approx(geometry.layout.height, layoutHeight, 1, name + ": player layout height is incorrect");
+  approx(geometry.iframe.width, layoutWidth, 1, name + ": iframe width is incorrect");
+  approx(geometry.iframe.height, layoutHeight, 1, name + ": iframe height is incorrect");
 }
 
 try {
@@ -75,6 +69,7 @@ try {
 
     await page.addInitScript(() => {
       window.__telegramEvents = {};
+      window.DeviceOrientationEvent = function DeviceOrientationEvent() {};
       window.__telegramReady = false;
       window.__telegramExpanded = false;
       window.Telegram = {
@@ -204,6 +199,16 @@ try {
     assert.equal(await page.locator("#sound-prompt").isVisible(), false,
       item.name + ": sound prompt did not disappear after user gesture");
 
+    const readInitialGeometryForSensor = async page => page.evaluate(() => {
+      const frame = document.querySelector("#video-frame");
+      const r = frame.getBoundingClientRect();
+      const iframe = document.querySelector("#mock-youtube-iframe");
+      return {
+        frame: { x: r.x, y: r.y, width: r.width, height: r.height },
+        layout: { width: frame.clientWidth, height: frame.clientHeight },
+        iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) }
+      };
+    });
     const initial = await page.evaluate(() => {
       const stage = document.querySelector("#player-stage");
       const stageRect = stage.getBoundingClientRect();
@@ -226,9 +231,48 @@ try {
       item.name + ": fullscreen stage width does not match app viewport");
     approx(initial.stage.height, initial.viewport.height, 1,
       item.name + ": fullscreen stage height does not match app viewport");
-    assertCoverGeometry({
+    assertViewportGeometry({
       frame: initial.frame, layout: initial.layout, iframe: initial.iframe
     }, initial.viewport.width, initial.viewport.height, item.name + " automatic fullscreen");
+
+    if (item.height > item.width) {
+      await page.evaluate(() => {
+        const sideways = new Event("deviceorientation");
+        Object.defineProperty(sideways, "gamma", { value: 90 });
+        window.dispatchEvent(sideways);
+      });
+      await page.waitForFunction(() =>
+        document.querySelector("#player-stage").classList.contains("virtual-device-landscape")
+      );
+      await page.waitForFunction(() => {
+        const frame = document.querySelector("#video-frame");
+        const iframe = document.querySelector("#mock-youtube-iframe");
+        return Math.abs(parseFloat(iframe.style.width) - frame.clientWidth) <= 1 &&
+          Math.abs(parseFloat(iframe.style.height) - frame.clientHeight) <= 1;
+      });
+      const sensorLandscape = await readInitialGeometryForSensor(page);
+      assertViewportGeometry({
+        frame: sensorLandscape.frame,
+        layout: sensorLandscape.layout,
+        iframe: sensorLandscape.iframe
+      }, item.width, item.height, item.name + " sensor landscape",
+      item.height, item.width);
+
+      await page.evaluate(() => {
+        const upright = new Event("deviceorientation");
+        Object.defineProperty(upright, "gamma", { value: 0 });
+        window.dispatchEvent(upright);
+      });
+      await page.waitForFunction(() =>
+        !document.querySelector("#player-stage").classList.contains("virtual-device-landscape")
+      );
+      await page.waitForFunction(() => {
+        const frame = document.querySelector("#video-frame");
+        const iframe = document.querySelector("#mock-youtube-iframe");
+        return Math.abs(parseFloat(iframe.style.width) - frame.clientWidth) <= 1 &&
+          Math.abs(parseFloat(iframe.style.height) - frame.clientHeight) <= 1;
+      });
+    }
 
     assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "true",
       item.name + ": controls should begin hidden");
@@ -271,7 +315,7 @@ try {
       return {
         viewport: { width: app.width, height: app.height },
         active: stage.classList.contains("virtual-fullscreen"),
-        rotated: stage.classList.contains("virtual-rotated"),
+        deviceLandscape: stage.classList.contains("virtual-device-landscape"),
         stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
         frame: { x: frameRect.x, y: frameRect.y, width: frameRect.width, height: frameRect.height },
         layout: { width: frame.clientWidth, height: frame.clientHeight },
@@ -304,9 +348,9 @@ try {
     }, telegramStableHeight);
     await waitForIframeToMatchFrame();
     const telegramSized = await readFullGeometry();
-    assert.equal(telegramSized.rotated, telegramSized.viewport.height > telegramSized.viewport.width,
+    assert.equal(telegramSized.deviceLandscape, false,
       item.name + ": Telegram fullscreen viewport orientation was not applied");
-    assertCoverGeometry({
+    assertViewportGeometry({
       frame: telegramSized.frame,
       layout: telegramSized.layout,
       iframe: telegramSized.iframe
@@ -347,13 +391,16 @@ try {
     await page.waitForFunction(() => {
       const stage = document.querySelector("#player-stage");
       const app = document.querySelector("#app").getBoundingClientRect();
-      return stage.classList.contains("virtual-rotated") === (app.height > app.width);
+      const full = stage.getBoundingClientRect();
+      return Math.abs(full.width - app.width) <= 1 &&
+        Math.abs(full.height - app.height) <= 1 &&
+        !stage.classList.contains("virtual-device-landscape");
     });
     await waitForIframeToMatchFrame();
     const turned = await readFullGeometry();
-    assert.equal(turned.rotated, reversed.height > reversed.width,
+    assert.equal(turned.deviceLandscape, false,
       item.name + ": rotation state did not update after viewport change");
-    assertCoverGeometry({
+    assertViewportGeometry({
       frame: turned.frame,
       layout: turned.layout,
       iframe: turned.iframe
@@ -373,11 +420,14 @@ try {
     await page.waitForFunction(() => {
       const stage = document.querySelector("#player-stage");
       const app = document.querySelector("#app").getBoundingClientRect();
-      return stage.classList.contains("virtual-rotated") === (app.height > app.width);
+      const full = stage.getBoundingClientRect();
+      return Math.abs(full.width - app.width) <= 1 &&
+        Math.abs(full.height - app.height) <= 1 &&
+        !stage.classList.contains("virtual-device-landscape");
     });
     await waitForIframeToMatchFrame();
     const restoredOrientation = await readFullGeometry();
-    assertCoverGeometry({
+    assertViewportGeometry({
       frame: restoredOrientation.frame,
       layout: restoredOrientation.layout,
       iframe: restoredOrientation.iframe
