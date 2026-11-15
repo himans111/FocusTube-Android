@@ -258,7 +258,7 @@ try {
         const matrix = new DOMMatrixReadOnly(
           getComputedStyle(document.querySelector("#player-stage")).transform
         );
-        return Math.abs(matrix.a) < 0.02 && matrix.b > 0.99;
+        return Math.abs(matrix.a) < 0.0001 && matrix.b > 0.99999;
       });
       const sensorLandscape = await readInitialGeometryForSensor(page);
       assertViewportGeometry({
@@ -294,7 +294,7 @@ try {
         const matrix = new DOMMatrixReadOnly(
           getComputedStyle(document.querySelector("#player-stage")).transform
         );
-        return Math.abs(matrix.a) < 0.02 && matrix.b < -0.99;
+        return Math.abs(matrix.a) < 0.0001 && matrix.b < -0.99999;
       });
       const leftRotation = await page.evaluate(() => {
         const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
@@ -317,7 +317,7 @@ try {
         const matrix = new DOMMatrixReadOnly(
           getComputedStyle(document.querySelector("#player-stage")).transform
         );
-        return matrix.a > 0.99 && Math.abs(matrix.b) < 0.02;
+        return matrix.a > 0.99999 && Math.abs(matrix.b) < 0.0001;
       });
       await page.waitForFunction(() => {
         const frame = document.querySelector("#video-frame");
