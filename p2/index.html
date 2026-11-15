@@ -12,8 +12,8 @@
       background: #000;
       --player-viewport-width: 100vw;
       --player-viewport-height: 100vh;
-      --player-frame-width: min(100vw, 177.7778dvh);
-      --player-frame-height: min(56.25vw, 100dvh);
+      --player-frame-width: 100vw;
+      --player-frame-height: 100vh;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -87,8 +87,10 @@
       cursor: pointer;
     }
     #player-stage.controls-visible #tap-shield { pointer-events: none; }
-    /* Website-owned virtual fullscreen: no host or browser fullscreen API.
-       It fills the webpage viewport and rotates the 16:9 player in portrait. */
+    /* Fullscreen uses the measured web-app viewport as the YouTube player
+       viewport. YouTube fits each source video's own aspect ratio inside it.
+       If the phone is physically turned sideways while Android auto-rotate is
+       locked, rotate only the player frame using the orientation sensor. */
     #player-stage.virtual-fullscreen {
       position: fixed !important;
       inset: 0 !important;
@@ -105,7 +107,6 @@
       place-items: center;
       padding: 0;
       box-sizing: border-box;
-      transform: none;
       overflow: hidden;
       background: #000;
       overscroll-behavior: contain;
@@ -117,15 +118,12 @@
       top: 50%;
       width: var(--player-frame-width);
       height: var(--player-frame-height);
-      aspect-ratio: 16 / 9;
+      aspect-ratio: auto;
       transform: translate(-50%, -50%);
       transform-origin: center center;
     }
-    #player-stage.virtual-fullscreen.virtual-rotated #video-frame {
-      width: var(--player-frame-width);
-      height: var(--player-frame-height);
+    #player-stage.virtual-fullscreen.virtual-device-landscape #video-frame {
       transform: translate(-50%, -50%) rotate(90deg);
-      transform-origin: center center;
     }
     #player-stage.virtual-fullscreen #drag-strip { display: none; }
     #drag-strip {
@@ -231,8 +229,8 @@
       <div id="video-frame">
         <div id="player"></div>
       </div>
-      <!-- Controls belong to the fixed stage, not the rotated video frame.
-           This keeps the fullscreen button reachable on portrait phones. -->
+      <!-- Controls stay separate from the video frame so they remain reachable
+           in portrait, landscape and sensor-rotated fullscreen modes. -->
       <div id="tap-shield" aria-label="Tap to show player controls"></div>
       <div id="drag-strip" aria-label="Hold and drag video"></div>
       <button id="fullscreen-button" type="button" aria-label="Enter fullscreen" title="Fullscreen" aria-hidden="true" tabindex="-1">
@@ -277,6 +275,9 @@
       let viewportWidth = Math.max(1, window.innerWidth || 1);
       let viewportHeight = Math.max(1, window.innerHeight || 1);
       let telegramViewportIsStable = true;
+      let deviceIsLandscape = null;
+      let deviceOrientationListening = false;
+      let deviceOrientationPermissionAsked = false;
       let resizeObserver = null;
 
       function decode(value) {
@@ -445,17 +446,54 @@
         rootStyle.setProperty("--player-viewport-width", width + "px");
         rootStyle.setProperty("--player-viewport-height", height + "px");
 
-        // Cover-fit a 16:9 landscape video into this measured app viewport.
-        // Rotating the landscape frame for portrait viewports avoids locking
-        // the device orientation and keeps the source aspect ratio unchanged.
-        const longestSide = Math.max(width, height);
-        const shortestSide = Math.min(width, height);
-        const landscapeWidth = Math.max(longestSide, shortestSide * (16 / 9));
-        const landscapeHeight = landscapeWidth * (9 / 16);
-        rootStyle.setProperty("--player-frame-width", landscapeWidth + "px");
-        rootStyle.setProperty("--player-frame-height", landscapeHeight + "px");
-        stage.classList.toggle("virtual-rotated", Boolean(fullscreen && height > width));
+        // Normally the YouTube iframe receives the exact measured viewport.
+        // If the phone is sideways but Android keeps the webview in portrait,
+        // swap frame dimensions and rotate that frame only, without OS locking.
+        const virtualDeviceLandscape = Boolean(
+          fullscreen && height > width && deviceIsLandscape === true
+        );
+        const videoFrameWidth = virtualDeviceLandscape ? height : width;
+        const videoFrameHeight = virtualDeviceLandscape ? width : height;
+        rootStyle.setProperty("--player-frame-width", videoFrameWidth + "px");
+        rootStyle.setProperty("--player-frame-height", videoFrameHeight + "px");
+        stage.classList.toggle("virtual-device-landscape", virtualDeviceLandscape);
         schedulePlayerResize();
+      }
+
+      function handleDeviceOrientation(event) {
+        if (!fullscreen || viewportHeight <= viewportWidth) return;
+        const gamma = Number(event && event.gamma);
+        if (!Number.isFinite(gamma)) return;
+        const tilt = Math.abs(gamma);
+        let nextState = deviceIsLandscape;
+        if (tilt >= 55) nextState = true;
+        else if (tilt <= 35) nextState = false;
+        if (nextState !== deviceIsLandscape) {
+          deviceIsLandscape = nextState;
+          updateViewportMetrics();
+        }
+      }
+
+      function attachDeviceOrientationListener() {
+        if (deviceOrientationListening) return;
+        window.addEventListener("deviceorientation", handleDeviceOrientation, true);
+        deviceOrientationListening = true;
+      }
+
+      function enableDeviceOrientationTracking(fromUserGesture = false) {
+        const OrientationEvent = window.DeviceOrientationEvent;
+        if (!OrientationEvent) return;
+        if (typeof OrientationEvent.requestPermission === "function") {
+          if (!fromUserGesture || deviceOrientationPermissionAsked) return;
+          deviceOrientationPermissionAsked = true;
+          try {
+            OrientationEvent.requestPermission().then(permission => {
+              if (permission === "granted") attachDeviceOrientationListener();
+            }).catch(() => {});
+          } catch (_) {}
+          return;
+        }
+        attachDeviceOrientationListener();
       }
 
       function requestTelegramFullscreen() {
@@ -482,8 +520,8 @@
       function setFullscreenUi(value) {
         fullscreen = Boolean(value);
         stage.classList.toggle("virtual-fullscreen", fullscreen);
-        fullscreenButton.setAttribute("aria-label", fullscreen ? "Exit virtual landscape" : "Enter virtual landscape");
-        fullscreenButton.title = fullscreen ? "Exit virtual landscape" : "Virtual landscape";
+        fullscreenButton.setAttribute("aria-label", fullscreen ? "Exit fullscreen" : "Enter fullscreen");
+        fullscreenButton.title = fullscreen ? "Exit fullscreen" : "Fullscreen";
         playerLeft = 0;
         playerTop = 0;
         stage.classList.remove("manually-positioned");
@@ -553,6 +591,7 @@
       fullscreenButton.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
+        enableDeviceOrientationTracking(true);
         setControlsVisible(true, true);
         if (fullscreen) exitVirtualLandscape();
         else enterVirtualLandscape();
@@ -570,6 +609,7 @@
         shieldPointer = null;
         if (moved <= 14) {
           event.preventDefault();
+          enableDeviceOrientationTracking(true);
           setControlsVisible(true, true);
         }
       });
@@ -709,6 +749,10 @@
         api.async = true;
         document.head.appendChild(api);
       }
+
+      // Start sensor listening without prompting where the browser permits.
+      // iOS requests permission after the first genuine touch.
+      enableDeviceOrientationTracking(false);
 
       // Long-press on the thin top edge of the video or on the empty black
       // workspace starts a drag. Short taps and normal YouTube controls are
