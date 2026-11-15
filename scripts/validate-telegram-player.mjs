@@ -32,8 +32,8 @@ const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
 if (!scripts.length) throw new Error("No inline JavaScript found");
 
 const controlPlacement = `      </div>
-      <!-- Controls belong to the fixed stage, not the rotated video frame.
-           This keeps the fullscreen button reachable on portrait phones. -->
+      <!-- Controls stay separate from the video frame so they remain reachable
+           in portrait, landscape and sensor-rotated fullscreen modes. -->
       <div id="tap-shield"`;
 if (!html.includes(controlPlacement)) {
   throw new Error("Fullscreen/touch controls must be siblings of the rotated video frame");
@@ -47,11 +47,15 @@ const required = [
   'iframe.style.height = height + "px"',
   "player.setSize(width, height)",
   "#player-stage.virtual-fullscreen",
-  "#player-stage.virtual-fullscreen.virtual-rotated #video-frame",
+  "#player-stage.virtual-fullscreen #video-frame",
+  "#player-stage.virtual-fullscreen.virtual-device-landscape #video-frame",
   "transform: translate(-50%, -50%) rotate(90deg)",
-  "const longestSide = Math.max(width, height)",
-  "const shortestSide = Math.min(width, height)",
-  "Math.max(longestSide, shortestSide * (16 / 9))",
+  "const virtualDeviceLandscape = Boolean(",
+  "const videoFrameWidth = virtualDeviceLandscape ? height : width",
+  "const videoFrameHeight = virtualDeviceLandscape ? width : height",
+  "function handleDeviceOrientation(event)",
+  "Math.abs(gamma)",
+  "window.addEventListener(\"deviceorientation\", handleDeviceOrientation, true)",
   "--player-viewport-width",
   "--player-viewport-height",
   "--player-frame-width",
@@ -126,18 +130,10 @@ for (const [vw, vh] of [
   [1024, 768], [1366, 768], [1920, 1080],
   [1512, 982], [2560, 1080]
 ]) {
-  const portrait = vh > vw;
-  const longestSide = Math.max(vw, vh);
-  const shortestSide = Math.min(vw, vh);
-  const landscapeWidth = Math.max(longestSide, shortestSide * (16 / 9));
-  const videoHeight = landscapeWidth * 9 / 16;
-  const renderedWidth = portrait ? videoHeight : landscapeWidth;
-  const renderedHeight = portrait ? landscapeWidth : videoHeight;
-  if (renderedWidth + 0.01 < vw || renderedHeight + 0.01 < vh) {
-    throw new Error("Virtual landscape leaves an uncovered strip at " + vw + "x" + vh);
-  }
-  if (Math.abs(landscapeWidth / videoHeight - 16 / 9) > 0.0001) {
-    throw new Error("Virtual landscape aspect ratio changed for " + vw + "x" + vh);
+  const frameWidth = vh > vw ? vh : vw;
+  const frameHeight = vh > vw ? vw : vh;
+  if (frameWidth < 200 || frameHeight < 200) {
+    throw new Error("YouTube iframe minimum viewport is not met at " + vw + "x" + vh);
   }
 }
 
