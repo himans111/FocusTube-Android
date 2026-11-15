@@ -116,7 +116,7 @@
       background: #000;
       overscroll-behavior: contain;
       touch-action: manipulation;
-      will-change: transform, width, height;
+      will-change: transform;
     }
     #player-stage.virtual-fullscreen #video-frame {
       position: absolute;
@@ -143,7 +143,7 @@
       transform: translate(-50%, -50%) rotate(90deg) !important;
     }
     #player-stage.virtual-fullscreen {
-      transition: transform .22s ease;
+      transition: transform .28s cubic-bezier(.2,.8,.2,1);
     }
     #player-stage.virtual-fullscreen #player-toolbar {
       position: absolute;
@@ -245,15 +245,20 @@
       bottom: max(10px, env(safe-area-inset-bottom));
       top: auto;
       transform: none;
-      width: 48px;
-      height: 48px;
-      padding: 11px;
+      width: auto;
+      min-width: 126px;
+      height: 44px;
+      padding: 0 14px;
+      gap: 8px;
       border: 0;
-      border-radius: 50%;
+      border-radius: 999px;
       color: #fff;
-      background: rgba(0,0,0,.34);
-      display: grid;
-      place-items: center;
+      background: rgba(0,0,0,.52);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font: 650 13px/1 system-ui, sans-serif;
+      white-space: nowrap;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
       opacity: 0;
@@ -268,23 +273,8 @@
       pointer-events: auto;
     }
     #fullscreen-button:active { background: rgba(0,0,0,.62); }
-    #fullscreen-button svg { width: 24px; height: 24px; display: block; }
-    #sound-prompt {
-      position: absolute;
-      z-index: 6;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      border: 1px solid rgba(255,255,255,.22);
-      border-radius: 999px;
-      padding: 11px 16px;
-      color: #fff;
-      background: rgba(0,0,0,.82);
-      font: 600 14px/1.2 system-ui, sans-serif;
-      white-space: nowrap;
-      cursor: pointer;
-    }
-    #sound-prompt[hidden] { display: none; }
+    #fullscreen-button svg { width: 20px; height: 20px; display: block; flex: 0 0 auto; }
+    #fullscreen-label { display: inline-block; }
     #status {
       position: fixed;
       left: 12px;
@@ -326,8 +316,8 @@
           <path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/>
           <path d="M8 8 3 3M16 8l5-5M8 16l-5 5M16 16l5 5"/>
         </svg>
+        <span id="fullscreen-label">Fullscreen</span>
       </button>
-      <button id="sound-prompt" type="button" hidden>Tap to play with sound</button>
     </section>
     <div id="status" role="status" aria-live="polite"></div>
   </main>
@@ -351,7 +341,7 @@
       const zoomInButton = document.getElementById("zoom-in-button");
       const zoomResetButton = document.getElementById("zoom-reset-button");
       const zoomValue = document.getElementById("zoom-value");
-      const soundPrompt = document.getElementById("sound-prompt");
+      const fullscreenLabel = document.getElementById("fullscreen-label");
       const status = document.getElementById("status");
       const dragStrip = document.getElementById("drag-strip");
       const telegram = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -373,6 +363,14 @@
       // Rotation is limited to fullscreen. Signed values distinguish the
       // two landscape directions while Android's system auto-rotate stays off.
       let deviceRotation = 0;
+      let filteredGamma = null;
+      let pendingDeviceRotation = null;
+      let pendingRotationSamples = 0;
+      let pendingRotationSince = 0;
+      const SENSOR_ENTER_ANGLE = 64;
+      const SENSOR_EXIT_ANGLE = 24;
+      const SENSOR_STABLE_SAMPLES = 4;
+      const SENSOR_STABLE_MS = 220;
       let videoZoom = 1;
       const MIN_VIDEO_ZOOM = 1;
       const MAX_VIDEO_ZOOM = 2.5;
@@ -380,6 +378,9 @@
       let deviceOrientationListening = false;
       let deviceOrientationPermissionAsked = false;
       let resizeObserver = null;
+      let playerResizeFrame = 0;
+      let lastPlayerFrameWidth = 0;
+      let lastPlayerFrameHeight = 0;
 
       function decode(value) {
         let result = String(value || "").trim();
@@ -468,6 +469,8 @@
         if (width < 200 || height < 200) return;
 
         const iframe = videoFrame.querySelector(":scope > iframe");
+        if (!iframe && !(player && typeof player.setSize === "function")) return;
+        if (width === lastPlayerFrameWidth && height === lastPlayerFrameHeight) return;
         if (iframe) {
           iframe.style.width = width + "px";
           iframe.style.height = height + "px";
@@ -477,16 +480,22 @@
           iframe.height = String(height);
         }
 
-        // Keep the YouTube API informed as an additional hint. The direct outer
-        // iframe sizing above remains effective even if setSize throws or races.
+        // Resize only when the settled frame dimensions actually change.
+        // This avoids repeatedly nudging YouTube while the device sensor jitters.
+        lastPlayerFrameWidth = width;
+        lastPlayerFrameHeight = height;
         if (player && typeof player.setSize === "function") {
           try { player.setSize(width, height); } catch (_) {}
         }
       }
 
       function schedulePlayerResize() {
+        if (playerResizeFrame) return;
         if (typeof window.requestAnimationFrame === "function") {
-          window.requestAnimationFrame(resizePlayerToFrame);
+          playerResizeFrame = window.requestAnimationFrame(() => {
+            playerResizeFrame = 0;
+            resizePlayerToFrame();
+          });
         } else {
           resizePlayerToFrame();
         }
@@ -545,6 +554,13 @@
 
         viewportWidth = width;
         viewportHeight = height;
+        // When Android/Telegram has rotated the actual viewport, let that
+        // native orientation win and clear any virtual sensor rotation.
+        if (fullscreen && width >= height) {
+          deviceRotation = 0;
+          filteredGamma = null;
+          resetPendingDeviceRotation();
+        }
         rootStyle.setProperty("--player-viewport-width", width + "px");
         rootStyle.setProperty("--player-viewport-height", height + "px");
 
@@ -565,24 +581,63 @@
         schedulePlayerResize();
       }
 
+      function resetPendingDeviceRotation() {
+        pendingDeviceRotation = null;
+        pendingRotationSamples = 0;
+        pendingRotationSince = 0;
+      }
+
       function handleDeviceOrientation(event) {
-        // Never rotate the mini-player. When the webview already resized to
-        // landscape, the browser/Telegram has done the rotation for us.
-        if (!fullscreen || viewportHeight <= viewportWidth) {
-          if (deviceRotation !== 0 && viewportHeight <= viewportWidth) {
+        // Use the browser's native landscape viewport whenever Android
+        // auto-rotate is enabled. Virtual rotation is only the portrait-webview fallback.
+        if (!fullscreen) return;
+        if (viewportWidth >= viewportHeight) {
+          if (deviceRotation !== 0) {
             deviceRotation = 0;
+            filteredGamma = null;
+            resetPendingDeviceRotation();
             updateViewportMetrics();
           }
           return;
         }
+
         const gamma = Number(event && event.gamma);
         if (!Number.isFinite(gamma)) return;
+
+        // Low-pass filtering removes small hand/sensor tremors. Separate enter
+        // and exit thresholds add hysteresis so the frame cannot flap at 90°.
+        filteredGamma = filteredGamma === null
+          ? gamma
+          : filteredGamma * 0.55 + gamma * 0.45;
+
         let nextRotation = deviceRotation;
-        if (gamma >= 55) nextRotation = 90;
-        else if (gamma <= -55) nextRotation = -90;
-        else if (Math.abs(gamma) <= 35) nextRotation = 0;
-        if (nextRotation !== deviceRotation) {
+        if (deviceRotation === 0) {
+          if (filteredGamma >= SENSOR_ENTER_ANGLE) nextRotation = 90;
+          else if (filteredGamma <= -SENSOR_ENTER_ANGLE) nextRotation = -90;
+        } else if (deviceRotation === 90) {
+          if (filteredGamma <= -SENSOR_ENTER_ANGLE) nextRotation = -90;
+          else if (filteredGamma <= SENSOR_EXIT_ANGLE) nextRotation = 0;
+        } else if (deviceRotation === -90) {
+          if (filteredGamma >= SENSOR_ENTER_ANGLE) nextRotation = 90;
+          else if (filteredGamma >= -SENSOR_EXIT_ANGLE) nextRotation = 0;
+        }
+
+        if (nextRotation === deviceRotation) {
+          resetPendingDeviceRotation();
+          return;
+        }
+        const now = Date.now();
+        if (pendingDeviceRotation !== nextRotation) {
+          pendingDeviceRotation = nextRotation;
+          pendingRotationSamples = 1;
+          pendingRotationSince = now;
+          return;
+        }
+        pendingRotationSamples += 1;
+        if (pendingRotationSamples >= SENSOR_STABLE_SAMPLES &&
+            now - pendingRotationSince >= SENSOR_STABLE_MS) {
           deviceRotation = nextRotation;
+          resetPendingDeviceRotation();
           updateViewportMetrics();
         }
       }
@@ -632,10 +687,13 @@
 
       function setFullscreenUi(value) {
         fullscreen = Boolean(value);
-        if (!fullscreen) deviceRotation = 0;
+        deviceRotation = 0;
+        filteredGamma = null;
+        resetPendingDeviceRotation();
         stage.classList.toggle("virtual-fullscreen", fullscreen);
         fullscreenButton.setAttribute("aria-label", fullscreen ? "Exit fullscreen" : "Enter fullscreen");
         fullscreenButton.title = fullscreen ? "Exit fullscreen" : "Fullscreen";
+        fullscreenLabel.textContent = fullscreen ? "Exit fullscreen" : "Fullscreen";
         playerLeft = 0;
         playerTop = 0;
         stage.classList.remove("manually-positioned");
@@ -713,6 +771,8 @@
 
       function setDeviceRotation(value) {
         if (!fullscreen) return;
+        resetPendingDeviceRotation();
+        filteredGamma = null;
         deviceRotation = value === -90 ? -90 : value === 90 ? 90 : 0;
         updateViewportMetrics();
         setControlsVisible(true, true);
@@ -736,7 +796,6 @@
       fullscreenButton.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-        enableDeviceOrientationTracking(true);
         setControlsVisible(true, true);
         if (fullscreen) exitVirtualLandscape();
         else enterVirtualLandscape();
@@ -781,7 +840,6 @@
         shieldPointer = null;
         if (moved <= 14) {
           event.preventDefault();
-          enableDeviceOrientationTracking(true);
           setControlsVisible(true, true);
         }
       });
@@ -801,26 +859,13 @@
             try { telegram.onEvent("fullscreenChanged", updateViewportMetrics); } catch (_) {}
             try { telegram.onEvent("fullscreenFailed", updateViewportMetrics); } catch (_) {}
           }
-          telegram.expand();
+          // Do not expand or fullscreen the Mini App on launch. The user
+          // chooses fullscreen with the visible player button.
           if (typeof telegram.setHeaderColor === "function") telegram.setHeaderColor("#000000");
           if (typeof telegram.setBackgroundColor === "function") telegram.setBackgroundColor("#000000");
         } catch (_) {}
 
       }
-
-      function enableSound() {
-        if (!player) return;
-        autoplayWasBlocked = false;
-        try {
-          player.unMute();
-          player.setVolume(100);
-          player.playVideo();
-        } catch (_) {}
-        soundPrompt.hidden = true;
-        autoplayWasBlocked = false;
-      }
-
-      soundPrompt.addEventListener("click", enableSound);
 
       window.onYouTubeIframeAPIReady = function () {
         if (!payload) return;
@@ -875,25 +920,20 @@
             },
             onStateChange(event) {
               if (event.data === 1) {
-                let muted = false;
-                try { muted = Boolean(event.target.isMuted()); } catch (_) {}
-                autoplayWasBlocked = muted;
-                soundPrompt.textContent = "Tap once to enable sound";
-                soundPrompt.hidden = !muted;
+                try { autoplayWasBlocked = Boolean(event.target.isMuted()); }
+                catch (_) { autoplayWasBlocked = false; }
               }
             },
             onAutoplayBlocked() {
               autoplayWasBlocked = true;
-              // Muted autoplay is generally permitted; this keeps the video
-              // moving while preserving a one-tap sound fallback where needed.
+              // Keep autoplay moving silently when the browser blocks sound.
+              // No extra sound prompt is placed over the video.
               try {
                 if (player) {
                   player.mute();
                   player.playVideo();
                 }
               } catch (_) {}
-              soundPrompt.textContent = "Tap once to enable sound";
-              soundPrompt.hidden = false;
             },
             onError() {
               setStatus("This YouTube video cannot be played here.", true);
@@ -911,20 +951,14 @@
           setStatus("");
           return;
         }
-        // Open edge-to-edge as soon as a valid video is supplied. Telegram's
-        // native fullscreen removes app chrome; the CSS stage is the fallback.
-        requestTelegramFullscreen();
-        setFullscreenUi(true);
-        setControlsVisible(false, false);
+        // Keep the video in its normal player box on launch. The visible
+        // Fullscreen button is the only way to request fullscreen.
+        setControlsVisible(true, false);
         const api = document.createElement("script");
         api.src = "https://www.youtube.com/iframe_api";
         api.async = true;
         document.head.appendChild(api);
       }
-
-      // Start sensor listening without prompting where the browser permits.
-      // iOS requests permission after the first genuine touch.
-      enableDeviceOrientationTracking(false);
 
       // Long-press on the thin top edge of the video or on the empty black
       // workspace starts a drag. Short taps and normal YouTube controls are
