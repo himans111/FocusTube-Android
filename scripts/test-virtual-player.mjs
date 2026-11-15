@@ -322,8 +322,9 @@ try {
       });
     }
 
+    await page.locator("#tap-shield").click({ position: { x: 20, y: 20 } });
     assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "false",
-      item.name + ": Fullscreen button should remain visible in fullscreen controls");
+      item.name + ": Fullscreen button should become visible after tapping the player");
     assert.equal(await page.locator("#player-toolbar").getAttribute("aria-hidden"), "false",
       item.name + ": fullscreen toolbar did not appear");
     await page.locator("#zoom-in-button").click();
