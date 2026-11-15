@@ -58,8 +58,11 @@ const required = [
   "const videoFrameWidth = virtualDeviceLandscape ? height : width",
   "const videoFrameHeight = virtualDeviceLandscape ? width : height",
   "function handleDeviceOrientation(event)",
-  "gamma >= 55",
-  "gamma <= -55",
+  "const SENSOR_ENTER_ANGLE = 64;",
+  "const SENSOR_EXIT_ANGLE = 24;",
+  "const SENSOR_STABLE_SAMPLES = 4;",
+  "const SENSOR_STABLE_MS = 220;",
+  "filteredGamma * 0.55 + gamma * 0.45",
   "let deviceRotation = 0;",
   'id="player-toolbar"',
   'id="zoom-in-button"',
@@ -70,7 +73,7 @@ const required = [
   "const MAX_VIDEO_ZOOM = 2.5;",
   "function applyVideoZoom()",
   "function setVideoZoom(value)",
-  "Math.abs(gamma)",
+  "resetPendingDeviceRotation()",
   "window.addEventListener(\"deviceorientation\", handleDeviceOrientation, true)",
   "--player-viewport-width",
   "--player-viewport-height",
@@ -89,14 +92,16 @@ const required = [
   "--player-frame-height",
   "iframe.allow = \"autoplay; encrypted-media; picture-in-picture; fullscreen; web-share\"",
   "player.mute()",
-  "Tap once to enable sound",
+  'id="fullscreen-label"',
+  "Fullscreen</span>",
   "event.isStateStable",
   'telegram.onEvent("viewportChanged", handleTelegramViewportChanged)',
   "--player-viewport-height",
   'id="tap-shield"',
   'tapShield.addEventListener("pointerup"',
   "setControlsVisible(false, false)",
-  "}, 2500);",
+  "setControlsVisible(true, false)",
+  "}, 2500);
   "fs: 0",
   "allowfullscreen",
   "onAutoplayBlocked",
@@ -109,6 +114,23 @@ const required = [
 ];
 for (const feature of required) {
   if (!html.includes(feature)) throw new Error("Missing required feature: " + feature);
+}
+
+const startPlayerStart = html.indexOf("function startPlayer()");
+const startPlayerEnd = html.indexOf("// Long-press", startPlayerStart);
+if (startPlayerStart < 0 || startPlayerEnd < 0) {
+  throw new Error("Cannot locate player startup sequence");
+}
+const startupCode = html.slice(startPlayerStart, startPlayerEnd);
+if (startupCode.includes("requestTelegramFullscreen()") ||
+    startupCode.includes("setFullscreenUi(true)") ||
+    startupCode.includes("telegram.expand()")) {
+  throw new Error("Player startup must not request fullscreen or expand Telegram");
+}
+if (html.includes("sound-prompt") ||
+    html.includes("Tap to play with sound") ||
+    html.includes("Tap once to enable sound")) {
+  throw new Error("Obsolete Tap to Sound prompt remains in the player");
 }
 
 const forbidden = [

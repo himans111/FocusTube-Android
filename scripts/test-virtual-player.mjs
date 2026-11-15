@@ -176,11 +176,11 @@ try {
         window.__mockPlayerConfig.playerVars.mute
     }));
     assert.equal(boot.ready, true, item.name + ": Telegram ready() was not called");
-    assert.equal(boot.expanded, true, item.name + ": Telegram expand() was not called");
+    assert.equal(boot.expanded, false, item.name + ": Telegram Mini App must not expand on launch");
     assert.equal(boot.viewportListener, true, item.name + ": Telegram viewportChanged listener missing");
     assert.equal(boot.fullscreenListener, true, item.name + ": Telegram fullscreenChanged listener missing");
-    assert.ok(boot.telegramFullscreenRequests >= 1, item.name + ": Telegram requestFullscreen was not called on launch");
-    assert.equal(boot.telegramIsFullscreen, true, item.name + ": Telegram did not enter fullscreen on launch");
+    assert.equal(boot.telegramFullscreenRequests, 0, item.name + ": fullscreen must never be requested on launch");
+    assert.equal(boot.telegramIsFullscreen, false, item.name + ": player entered fullscreen without a tap");
     assert.equal(boot.videoId, "dQw4w9WgXcQ", item.name + ": Telegram start_param was not parsed");
     assert.equal(boot.fullscreenParam, 0, item.name + ": expected website-owned fullscreen control");
     assert.ok(boot.playerCalls.includes("unMute"), item.name + ": sound-first autoplay was not attempted");
@@ -191,13 +191,8 @@ try {
     await page.evaluate(() => window.__mockPlayerConfig.events.onAutoplayBlocked());
     assert.equal(await page.evaluate(() => window.__mockPlayer.isMuted()), true,
       item.name + ": blocked autoplay did not switch to muted playback fallback");
-    assert.equal(await page.locator("#sound-prompt").isVisible(), true,
-      item.name + ": sound fallback control should appear only after autoplay is blocked");
-    await page.locator("#sound-prompt").click();
-    assert.equal(await page.evaluate(() => window.__mockPlayer.isMuted()), false,
-      item.name + ": one user gesture did not enable sound");
-    assert.equal(await page.locator("#sound-prompt").isVisible(), false,
-      item.name + ": sound prompt did not disappear after user gesture");
+    assert.equal(await page.locator("#sound-prompt").count(), 0,
+      item.name + ": the removed sound prompt must not exist");
 
     const readInitialGeometryForSensor = async page => page.evaluate(() => {
       const stage = document.querySelector("#player-stage");
@@ -213,38 +208,41 @@ try {
         iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) }
       };
     });
-    const initial = await page.evaluate(() => {
-      const stage = document.querySelector("#player-stage");
-      const stageRect = stage.getBoundingClientRect();
-      const app = document.querySelector("#app").getBoundingClientRect();
-      const frame = document.querySelector("#video-frame");
-      const frameRect = frame.getBoundingClientRect();
-      const iframe = document.querySelector("#mock-youtube-iframe");
-      return {
-        active: stage.classList.contains("virtual-fullscreen"),
-        viewport: { width: app.width, height: app.height },
-        stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
-        frame: { x: frameRect.x, y: frameRect.y, width: frameRect.width, height: frameRect.height },
-        layout: { width: frame.clientWidth, height: frame.clientHeight },
-        iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) }
-      };
-    });
-    assert.equal(initial.active, true,
-      item.name + ": video did not enter fullscreen automatically when opened");
-    approx(initial.stage.width, initial.viewport.width, 1,
-      item.name + ": fullscreen stage width does not match app viewport");
-    approx(initial.stage.height, initial.viewport.height, 1,
-      item.name + ": fullscreen stage height does not match app viewport");
-    assertViewportGeometry({
-      frame: initial.frame, layout: initial.layout, iframe: initial.iframe
-    }, initial.viewport.width, initial.viewport.height, item.name + " automatic fullscreen");
+
+    const sendGamma = async (gamma, count = 8) => {
+      await page.evaluate(async ({ value, samples }) => {
+        for (let i = 0; i < samples; i += 1) {
+          const sample = new Event("deviceorientation");
+          Object.defineProperty(sample, "gamma", { value });
+          window.dispatchEvent(sample);
+          await new Promise(resolve => setTimeout(resolve, 55));
+        }
+      }, { value: gamma, samples: count });
+      await page.waitForTimeout(320);
+    };
+    const initial = await page.evaluate(() => ({
+      active: document.querySelector("#player-stage").classList.contains("virtual-fullscreen"),
+      fullscreenLabel: document.querySelector("#fullscreen-label").textContent,
+      fullscreenButtonHidden: document.querySelector("#fullscreen-button").getAttribute("aria-hidden"),
+      requests: window.__telegramFullscreenRequests || 0
+    }));
+    assert.equal(initial.active, false,
+      item.name + ": video must stay in its normal player box until fullscreen is tapped");
+    assert.equal(initial.fullscreenLabel, "Fullscreen",
+      item.name + ": explicit Fullscreen button label is missing");
+    assert.equal(initial.fullscreenButtonHidden, "false",
+      item.name + ": Fullscreen button must be visible on launch");
+    assert.equal(initial.requests, 0,
+      item.name + ": no fullscreen request should occur before a user tap");
+
+    await page.locator("#fullscreen-button").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#player-stage").classList.contains("virtual-fullscreen")
+    );
+    await page.waitForTimeout(320);
 
     if (item.height > item.width) {
-      await page.evaluate(() => {
-        const sideways = new Event("deviceorientation");
-        Object.defineProperty(sideways, "gamma", { value: 90 });
-        window.dispatchEvent(sideways);
-      });
+      await sendGamma(90);
       await page.waitForFunction(() =>
         document.querySelector("#player-stage").classList.contains("virtual-device-landscape-right")
       );
@@ -282,11 +280,12 @@ try {
       approx(rightRotation, 1, 0.02,
         item.name + ": right-side rotation should use the positive 90-degree direction");
 
-      await page.evaluate(() => {
-        const sideways = new Event("deviceorientation");
-        Object.defineProperty(sideways, "gamma", { value: -90 });
-        window.dispatchEvent(sideways);
-      });
+      // Mild hand movement must not release or reverse the selected side.
+      await sendGamma(45, 8);
+      assert.equal(await page.locator("#player-stage").evaluate(el =>
+        el.classList.contains("virtual-device-landscape-right")
+      ), true, item.name + ": sensor noise caused an unwanted rotation change");
+      await sendGamma(-90);
       await page.waitForFunction(() =>
         document.querySelector("#player-stage").classList.contains("virtual-device-landscape-left")
       );
@@ -303,11 +302,7 @@ try {
       approx(leftRotation, -1, 0.02,
         item.name + ": left-side rotation should use the negative 90-degree direction");
 
-      await page.evaluate(() => {
-        const upright = new Event("deviceorientation");
-        Object.defineProperty(upright, "gamma", { value: 0 });
-        window.dispatchEvent(upright);
-      });
+      await sendGamma(0);
       await page.waitForFunction(() => {
         const stage = document.querySelector("#player-stage");
         return !stage.classList.contains("virtual-device-landscape-left") &&
@@ -327,13 +322,8 @@ try {
       });
     }
 
-    assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "true",
-      item.name + ": controls should begin hidden");
-    assert.equal(await page.locator("#player-toolbar").getAttribute("aria-hidden"), "true",
-      item.name + ": tool bar should begin hidden");
-    await page.locator("#tap-shield").click({ position: { x: 20, y: 20 } });
     assert.equal(await page.locator("#fullscreen-button").getAttribute("aria-hidden"), "false",
-      item.name + ": touch did not reveal controls");
+      item.name + ": Fullscreen button should remain visible in fullscreen controls");
     assert.equal(await page.locator("#player-toolbar").getAttribute("aria-hidden"), "false",
       item.name + ": fullscreen toolbar did not appear");
     await page.locator("#zoom-in-button").click();
