@@ -418,6 +418,9 @@ try {
       return {
         viewport: { width: app.width, height: app.height },
         active: stage.classList.contains("virtual-fullscreen"),
+        classes: stage.className,
+        stageTransform: getComputedStyle(stage).transform,
+        frameTransform: getComputedStyle(frame).transform,
         deviceLandscape: stage.classList.contains("virtual-device-landscape-left") ||
           stage.classList.contains("virtual-device-landscape-right"),
         stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
@@ -458,6 +461,7 @@ try {
     });
     await waitForIframeToMatchFrame();
     const telegramSized = await readFullGeometry();
+    console.log("DEBUG telegram " + item.name + " " + JSON.stringify(telegramSized));
     assert.equal(telegramSized.deviceLandscape, false,
       item.name + ": Telegram fullscreen viewport orientation was not applied");
     assertViewportGeometry({
