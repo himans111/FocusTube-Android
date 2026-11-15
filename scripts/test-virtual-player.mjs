@@ -229,7 +229,6 @@ try {
         iframe: { width: parseFloat(iframe.style.width), height: parseFloat(iframe.style.height) }
       };
     });
-    console.log("DEBUG " + item.name + " " + JSON.stringify(initial));
     assert.equal(initial.active, true,
       item.name + ": video did not enter fullscreen automatically when opened");
     approx(initial.stage.width, initial.viewport.width, 1,
