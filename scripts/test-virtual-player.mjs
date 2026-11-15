@@ -255,6 +255,7 @@ try {
           Math.abs(parseFloat(iframe.style.height) - frame.clientHeight) <= 1;
       });
       const sensorLandscape = await readInitialGeometryForSensor(page);
+      console.log("DEBUG sensor " + item.name + " " + JSON.stringify(sensorLandscape));
       assertViewportGeometry({
         frame: sensorLandscape.frame,
         layout: sensorLandscape.layout,
