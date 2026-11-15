@@ -254,8 +254,11 @@ try {
         return Math.abs(parseFloat(iframe.style.width) - frame.clientWidth) <= 1 &&
           Math.abs(parseFloat(iframe.style.height) - frame.clientHeight) <= 1;
       });
+      await page.waitForFunction(() => {
+        const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
+        return Math.abs(new DOMMatrixReadOnly(transform).b) > 0.98;
+      });
       const sensorLandscape = await readInitialGeometryForSensor(page);
-      console.log("DEBUG sensor " + item.name + " " + JSON.stringify(sensorLandscape));
       assertViewportGeometry({
         frame: sensorLandscape.frame,
         layout: sensorLandscape.layout,
@@ -285,6 +288,10 @@ try {
       await page.waitForFunction(() =>
         document.querySelector("#player-stage").classList.contains("virtual-device-landscape-left")
       );
+      await page.waitForFunction(() => {
+        const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
+        return new DOMMatrixReadOnly(transform).b < -0.98;
+      });
       const leftRotation = await page.evaluate(() => {
         const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
         return new DOMMatrixReadOnly(transform).b;
@@ -297,9 +304,15 @@ try {
         Object.defineProperty(upright, "gamma", { value: 0 });
         window.dispatchEvent(upright);
       });
-      await page.waitForFunction(() =>
-        !document.querySelector("#player-stage").classList.contains("virtual-device-landscape")
-      );
+      await page.waitForFunction(() => {
+        const stage = document.querySelector("#player-stage");
+        return !stage.classList.contains("virtual-device-landscape-left") &&
+          !stage.classList.contains("virtual-device-landscape-right");
+      });
+      await page.waitForFunction(() => {
+        const transform = getComputedStyle(document.querySelector("#player-stage")).transform;
+        return Math.abs(new DOMMatrixReadOnly(transform).b) < 0.02;
+      });
       await page.waitForFunction(() => {
         const frame = document.querySelector("#video-frame");
         const iframe = document.querySelector("#mock-youtube-iframe");
