@@ -101,7 +101,7 @@ const required = [
   'tapShield.addEventListener("pointerup"',
   "setControlsVisible(false, false)",
   "setControlsVisible(true, false)",
-  "}, 2500);
+  "}, 2500);",
   "fs: 0",
   "allowfullscreen",
   "onAutoplayBlocked",
