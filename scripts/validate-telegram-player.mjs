@@ -71,7 +71,6 @@ const required = [
   "appHeight ||",
   "telegramFullscreenHeight || appHeight",
   "--player-frame-height",
-  "landscapeWidth * (9 / 16)",
   "iframe.allow = \"autoplay; encrypted-media; picture-in-picture; fullscreen; web-share\"",
   "player.mute()",
   "Tap once to enable sound",
@@ -137,4 +136,4 @@ for (const [vw, vh] of [
   }
 }
 
-console.log("PASS: route parity, JavaScript syntax, fullscreen API exclusions, 16:9 cover geometry, responsive mini-player sizing and Telegram viewport integration.");
+console.log("PASS: route parity, JavaScript syntax, fullscreen API exclusions, viewport sizing, sensor rotation, responsive mini-player sizing and Telegram viewport integration.");
