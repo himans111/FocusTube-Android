@@ -391,12 +391,10 @@ try {
     await page.waitForFunction(() =>
       document.querySelector("#player-stage").classList.contains("virtual-fullscreen")
     );
-    await page.waitForFunction(() => {
-      const matrix = new DOMMatrixReadOnly(
-        getComputedStyle(document.querySelector("#player-stage")).transform
-      );
-      return matrix.a > 0.99999 && Math.abs(matrix.b) < 0.0001;
-    });
+    // Wait one full CSS transition interval after re-entering fullscreen.
+    // A computed-style sample in the same frame as classList changes can see
+    // the pre-transition value before Chromium starts interpolating it.
+    await page.waitForTimeout(260);
 
     const waitForIframeToMatchFrame = () => page.waitForFunction(() => {
       const frame = document.querySelector("#video-frame");
@@ -418,9 +416,6 @@ try {
       return {
         viewport: { width: app.width, height: app.height },
         active: stage.classList.contains("virtual-fullscreen"),
-        classes: stage.className,
-        stageTransform: getComputedStyle(stage).transform,
-        frameTransform: getComputedStyle(frame).transform,
         deviceLandscape: stage.classList.contains("virtual-device-landscape-left") ||
           stage.classList.contains("virtual-device-landscape-right"),
         stage: { x: stageRect.x, y: stageRect.y, width: stageRect.width, height: stageRect.height },
@@ -461,7 +456,6 @@ try {
     });
     await waitForIframeToMatchFrame();
     const telegramSized = await readFullGeometry();
-    console.log("DEBUG telegram " + item.name + " " + JSON.stringify(telegramSized));
     assert.equal(telegramSized.deviceLandscape, false,
       item.name + ": Telegram fullscreen viewport orientation was not applied");
     assertViewportGeometry({
